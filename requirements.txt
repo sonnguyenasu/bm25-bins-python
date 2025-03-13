@@ -2,3 +2,5 @@ bm25s
 PyStemmer
 numba
 jax
+tabulate
+matplotlib
