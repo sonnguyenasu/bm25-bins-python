@@ -4,3 +4,5 @@ numba
 jax
 tabulate
 matplotlib
+tqdm
+pandas
