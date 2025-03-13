@@ -1,3 +1,4 @@
+import logging
 
 from experiments import do_search
 from util import top_k_bins
@@ -11,7 +12,7 @@ from Stemmer import Stemmer
 if __name__ == "__main__":    
     print("Loading dataset")
     start = time.time()
-    corpus = load_nyt("./nyt_processed_regex_small.jsonl")
+    corpus = load_nyt("./nyt_processed_regex.jsonl")
     print("Dataset loaded in {} seconds".format(time.time() - start))
     print("Indexing")
     retriever = bm25s.BM25(backend="numba")
@@ -19,6 +20,12 @@ if __name__ == "__main__":
     corpus_token = process_text(corpus, stemmer)
     retriever.index(corpus_token)
     print("Indexing complete")
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
 
     do_search(10, 5, retriever)
 

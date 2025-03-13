@@ -129,32 +129,3 @@ def print_table(
 
     # Print table
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
-
-
-# Example usage
-if __name__ == "__main__":
-    # Example data for testing
-    sets = [set(range(i, i + 10)) for i in range(50)]
-    sets[0].update(range(100, 150))  # Make one bin larger
-
-    metadata1 = Metadata(
-        num_bins=50,
-        removed_items=5,
-        total_items=550,
-        average_load_per_bin=11,
-        keywords_with_overlap=20
-    )
-
-    metadata2 = Metadata(
-        num_bins=40,
-        removed_items=10,
-        total_items=450,
-        average_load_per_bin=13,
-        keywords_with_overlap=15
-    )
-
-    # Test the histogram function
-    fullness_histogram(sets, True, "Example_Histogram", 30)
-
-    # Test the table function
-    print_table(["Experiment 1", "Experiment 2"], [metadata1, metadata2])

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from bm25s import BM25
 
-from main import Config
+from config_classes import Config
 # Import the modules we've defined in the previous artifacts
 # Assuming these functions are defined in their respective modules
 from plotter import fullness_histogram, print_table

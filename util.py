@@ -8,9 +8,6 @@ from bm25s import BM25
 from tqdm import tqdm
 import logging
 
-
-LOGGER = logging.getLogger(__name__)
-
 import logging
 from typing import Dict, Set, List, Any, Optional
 from collections import defaultdict
@@ -50,7 +47,7 @@ def top_k(
         search_results = [result for i, result in enumerate(search_results[0]) if scores[0][i] != 0.0]
 
         document_ids = list(set(search_results))  # copy.deepcopy(search_results)
-        LOGGER.debug(document_ids)
+        logging.debug(document_ids)
 
         # Filter out words with too few results
         if len(search_results) < filter_k:
@@ -126,7 +123,7 @@ def get_bins(word: str,
         index = get_hash(word, choice) % max_bins
         
         overlap = sum(1 for idx in orig_results[index] if idx in document_ids)
-        LOGGER.debug(orig_results[index], overlap, document_ids)
+        logging.debug(orig_results[index], overlap, document_ids)
         overlap -= len(document_ids)
 
         if overlap >= (2**64 - 111):
@@ -134,7 +131,7 @@ def get_bins(word: str,
 
         bin_size = len(orig_results[index])
 
-        LOGGER.debug(f"Got index {index}, overlap: {overlap}, k: {search_results_len}, bin size: {bin_size}")
+        logging.debug(f"Got index {index}, overlap: {overlap}, k: {search_results_len}, bin size: {bin_size}")
         
         bin_choices.append((index, bin_size, overlap))
     
@@ -178,7 +175,7 @@ def top_k_bins(retriever: BM25,
     filter_k = config.filter_k
     max_load_factor = config.max_load_factor
     min_overlap_factor = config.min_overlap_factor
-    LOGGER.info(f"{k}, {d}, {max_bins}, {filter_k}, {max_load_factor}, {min_overlap_factor}")
+    logging.info(f"{k}, {d}, {max_bins}, {filter_k}, {max_load_factor}, {min_overlap_factor}")
     results = [set() for _ in range(max_bins)]
     orig_results = [[] for _ in range(max_bins)]
     archived_results = []
@@ -188,12 +185,12 @@ def top_k_bins(retriever: BM25,
     c = 0
     for word, word_token in tqdm(alphabet.items()):
         
-        LOGGER.debug(f"{word_token}, {word}")
+        logging.debug(f"{word_token}, {word}")
         search_results, scores = retriever.retrieve([[word_token]], k = k)
         search_results = [result for i, result in enumerate(search_results[0]) if scores[0][i] != 0.0]
         # convert result to document ids
         document_ids = list(set(search_results))#copy.deepcopy(search_results)
-        LOGGER.debug(document_ids)
+        logging.debug(document_ids)
         # skip words with too few results
         if len(search_results) < filter_k:
             continue

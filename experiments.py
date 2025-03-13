@@ -10,7 +10,6 @@ from plotter import fullness_histogram, print_table
 from util import top_k, top_k_bins, Metadata
 
 
-
 def do_search(
         k: int,
         filter_k: int,
@@ -174,26 +173,3 @@ def do_search(
 
     # Print the table
     print_table(format_strings, results)
-
-
-if __name__ == "__main__":
-    # Example usage
-    import logging
-
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-
-    # Example data
-    alphabet = {'word1', 'word2', 'word3', 'word4', 'word5'}
-    corpus = [
-        "This is document one with word1 and word2.",
-        "This is document two with word2 and word3.",
-        "This is document three with word3 and word4.",
-        "This is document four with word4 and word5."
-    ]
-
-    # Run the search function
-    do_search(3, 2, alphabet, corpus)
