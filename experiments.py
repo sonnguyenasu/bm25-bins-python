@@ -39,7 +39,7 @@ def do_search(
         list(top_k_res.values()),
         True,
         "Top K (No bins)",
-        len(top_k_res.values())
+        len(top_k_res.values())//100
     )
 
     max_bins = len(top_k_res.values()) // 10
@@ -61,7 +61,7 @@ def do_search(
         no_choice_bins[1],
         True,
         f"Top K 1-choice {max_bins}-bins",
-        max_bins
+        max_bins//100
     )
 
     # 2-choice bins
@@ -72,7 +72,7 @@ def do_search(
         two_choice_bins[1],
         True,
         f"Top K 2-choice {max_bins}-bins",
-        max_bins
+        max_bins//100
     )
 
     # 3-choice bins
@@ -83,7 +83,7 @@ def do_search(
         three_choice_bins[1],
         True,
         f"Top K 3-choice {max_bins}-bins",
-        max_bins
+        max_bins//100
     )
 
     # 3-choice bins with 1 max load bin removed
@@ -95,7 +95,7 @@ def do_search(
         three_choice_bins_remove_one[1],
         True,
         f"3-choice, {max_bins}-bins and 1 max-load bin removed",
-        max_bins
+        max_bins//100
     )
 
     # 2-choice bins minimizing load
@@ -107,7 +107,7 @@ def do_search(
         two_choice_bins_max_load[1],
         True,
         f"Top K 2-choice {max_bins}-bins, minimising load",
-        max_bins
+        max_bins//100
     )
 
     # Commented out in original:
@@ -132,7 +132,7 @@ def do_search(
         four_choice_min_overlap_max_overlap[1],
         True,
         f"4-choice {max_bins}-bins, remove 1 min overlap, 1 max load",
-        max_bins
+        max_bins//100
     )
 
     # Create format strings and results for the table
