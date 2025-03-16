@@ -1,6 +1,6 @@
 import logging
 
-from experiments import do_search
+from experiments import do_bm25_search
 from util import top_k_bins
 from dataloader import load_nyt, process_text
 import bm25s
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    do_search(10, 5, retriever)
+    do_bm25_search(10, 5, retriever)
 
     # config = Config(
     #     k=10,

@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import struct
 from config_classes import dataclass, Metadata, Config
@@ -13,6 +14,76 @@ from typing import Dict, Set, List, Any, Optional
 from collections import defaultdict
 from tqdm import tqdm  # For progress bar
 
+from dense_retriever import DenseRetriever
+
+
+def top_dense(
+        k: int,
+        retrieval: DenseRetriever,
+        filter_k: int,
+        alphabet: dict[str, int]
+) -> Dict[str, Set[int]]:
+    """
+    Performs top-k search for each word in the alphabet using a dense retriever and cosine
+    similarity. Relies on a pre-trained model but should be good enough (I hope)
+
+    Args:
+        k: Number of results to retrieve per word (the k in top-k)
+        retrieval: The dense retriever class
+        filter_k: Minimum number of results required to keep a word
+                 (e.g., if filter_k is 2, results with only 1 match will be discarded)
+
+    Returns:
+        Dict mapping words to sets of matching document IDs
+    """
+    results = {}
+
+
+    # Track duplicates for logging
+    counting_duplicates = defaultdict(int)
+    num_items = 0
+
+    for word, word_token in tqdm(alphabet.items()):
+        # Get search results for this word
+        search_results, scores = retrieval.retrieve(word, top_k = k)
+        search_results = [result for i, result in enumerate(search_results[0]) if scores[0][i] != 0.0]
+
+        document_ids = list(set(search_results))  # copy.deepcopy(search_results)
+        logging.debug(document_ids)
+
+        # Filter out words with too few results
+        if len(search_results) < filter_k:
+            continue
+
+        doc_ids = list(set(search_results))
+        # Process the results
+        for doc_id in doc_ids:
+            # Initialize the set for this word if it doesn't exist
+            if word not in results:
+                results[word] = set()
+
+            results[word].add(doc_id)
+
+            # Count items and track duplicates
+            num_items += 1
+            if doc_id in counting_duplicates:
+                counting_duplicates[doc_id] += 1
+            else:
+                counting_duplicates[doc_id] = 0
+
+
+    # Log summary information
+    total_duplicates = sum(counting_duplicates.values())
+    logging.info(
+        f"Top-K done without d-choice. Total number of duplicates: {total_duplicates}, "
+        f"total items in bins: {num_items}"
+    )
+
+    if results:  # Avoid division by zero
+        avg_items_per_bin = sum(len(item_set) for item_set in results.values()) / len(results)
+        logging.info(f"The average number of items in bins is {avg_items_per_bin}")
+
+    return results
 
 def top_k(
         k: int,
@@ -157,7 +228,7 @@ def remove_max_load(bins: List[Tuple[int, int, int]], count: int) -> List[Tuple[
     bins.sort(key=lambda x: x[2], reverse=True)  # Sort by overlap (descending)
     return bins[count:]  # Remove first `count` elements
 
-import copy
+
 
 def top_k_bins(retriever: BM25,
                config: Config) -> tuple[Metadata, list[set[int]]]:

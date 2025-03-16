@@ -4,13 +4,14 @@ from config_classes import dataclass, Config
 
 from bm25s import BM25
 
+from dense_retriever import DenseRetriever
 # Import the modules we've defined in the previous artifacts
 # Assuming these functions are defined in their respective modules
-from plotter import fullness_histogram, print_table
+from plotter import fullness_histogram, print_table, overlap_histogram
 from util import top_k, top_k_bins, Metadata
 
 
-def do_search(
+def do_bm25_search(
         k: int,
         filter_k: int,
         search: BM25
@@ -61,7 +62,7 @@ def do_search(
         no_choice_bins[1],
         True,
         f"Top K 1-choice {max_bins}-bins",
-        max_bins//100
+        30
     )
 
     # 2-choice bins
@@ -72,7 +73,7 @@ def do_search(
         two_choice_bins[1],
         True,
         f"Top K 2-choice {max_bins}-bins",
-        max_bins//100
+        30
     )
 
     # 3-choice bins
@@ -83,7 +84,7 @@ def do_search(
         three_choice_bins[1],
         True,
         f"Top K 3-choice {max_bins}-bins",
-        max_bins//100
+        30
     )
 
     # 3-choice bins with 1 max load bin removed
@@ -95,7 +96,7 @@ def do_search(
         three_choice_bins_remove_one[1],
         True,
         f"3-choice, {max_bins}-bins and 1 max-load bin removed",
-        max_bins//100
+        30
     )
 
     # 2-choice bins minimizing load
@@ -107,7 +108,7 @@ def do_search(
         two_choice_bins_max_load[1],
         True,
         f"Top K 2-choice {max_bins}-bins, minimising load",
-        max_bins//100
+        30
     )
 
     # Commented out in original:
@@ -132,7 +133,7 @@ def do_search(
         four_choice_min_overlap_max_overlap[1],
         True,
         f"4-choice {max_bins}-bins, remove 1 min overlap, 1 max load",
-        max_bins//100
+        30
     )
 
     # Create format strings and results for the table
@@ -173,3 +174,39 @@ def do_search(
 
     # Print the table
     print_table(format_strings, results)
+
+    return results,
+
+def do_dense_search(
+        k: int,
+        filter_k: int,
+        search: BM25,
+        documents: List[str],
+        retriever: DenseRetriever
+):
+    logging.info(
+        f"The total number of files is {0xDEADBEEF} and the alphabet size is {len(search.vocab_dict.keys())}"
+    )
+
+
+    retriever.encode_documents()
+
+    results = retriever.retrieve(query, top_k=3)
+
+    # Print the results
+    for i, result in enumerate(results):
+        logging.debug(f"Result {i + 1} (Score: {result['score']:.4f})")
+        logging.debug(result['document']['text'])
+
+
+    # Get top_k results
+    top_k_res = top_k(k, search, filter_k)
+    logging.info("Top K Done")
+
+    # Plot histogram for top k results
+    overlap_histogram(
+        list(top_k_res.values()),
+        True,
+        "Top K (No bins)",
+        40
+    )
