@@ -37,6 +37,8 @@ if __name__ == "__main__":
     else:
         device = "cpu"
 
+    logging.info(f"Using device: {device}")
+
     dense_retriever = DenseRetriever(filepath=filename, device=device)
 
     #do_bm25_search(10, 10, retriever)
