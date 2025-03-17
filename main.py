@@ -1,5 +1,7 @@
 import logging
 
+import torch
+
 from dense_retriever import DenseRetriever
 from experiments import do_dense_search
 from dataloader import load_nyt, process_text
@@ -29,7 +31,13 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    dense_retriever = DenseRetriever(filepath=filename)
+    # Check if CUDA is available
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    dense_retriever = DenseRetriever(filepath=filename, device=device)
 
     #do_bm25_search(10, 10, retriever)
     do_dense_search(10, 2, retriever, dense_retriever)

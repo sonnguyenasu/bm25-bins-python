@@ -16,8 +16,8 @@ class DenseRetriever:
             model_name: The name of the sentence transformer model to use.
                         Default is 'all-MiniLM-L6-v2' which is one of the few models I can run locally and is also popular
         """
-        self.device = device
-        self.model = SentenceTransformer(model_name).to(device)
+        self.device = torch.device(device)
+        self.model = SentenceTransformer(model_name).to(self.device)
         self.documents = []
         self.document_embeddings = None
         self.load_jsonl(filepath)
