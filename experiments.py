@@ -40,7 +40,7 @@ def do_bm25_search(
         list(top_k_res.values()),
         True,
         "Top K (No bins)",
-        len(top_k_res.values())//100
+        30
     )
 
     max_bins = len(top_k_res.values()) // 10
@@ -180,7 +180,8 @@ def do_bm25_search(
 def do_dense_search(
         k: int,
         filter_k: int,
-        search: BM25
+        search: BM25,
+        dense_search: DenseRetriever,
 ):
     logging.info(
         f"The total number of files is {0xDEADBEEF} and the alphabet size is {len(search.vocab_dict.keys())}"
@@ -188,18 +189,18 @@ def do_dense_search(
 
     alphabet = search.vocab_dict
 
-    dense_results = dense_top_k(k, search, filter_k, alphabet)
-
-
     # Get top_k results
+    logging.info("Starting BM25 search")
     top_k_res = top_k(k, search, filter_k, alphabet)
     logging.info("Top K Done")
+
+    dense_results = dense_top_k(k, dense_search, filter_k, alphabet)
 
     # Plot histogram for top k results
     overlap_histogram(
         list(dense_results.values()),
         list(top_k_res.values()),
-        True,
-        "Top K (No bins)",
+        False,
+        "Top K BM25 and Dense Retriever Comparison",
         40
     )

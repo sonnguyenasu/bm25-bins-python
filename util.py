@@ -1,18 +1,15 @@
 import copy
 import hashlib
 import struct
-from config_classes import dataclass, Metadata, Config
-from typing import Tuple, Union, Any, Literal
-from typing import List, Set
+from config_classes import Metadata, Config
+from typing import Tuple
 
 from bm25s import BM25
-from tqdm import tqdm
-import logging
 
 import logging
-from typing import Dict, Set, List, Any, Optional
+from typing import Dict, Set, List
 from collections import defaultdict
-from tqdm import tqdm  # For progress bar
+from tqdm import tqdm
 
 from dense_retriever import DenseRetriever
 
