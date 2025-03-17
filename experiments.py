@@ -8,7 +8,7 @@ from dense_retriever import DenseRetriever
 # Import the modules we've defined in the previous artifacts
 # Assuming these functions are defined in their respective modules
 from plotter import fullness_histogram, print_table, overlap_histogram
-from util import top_k, top_k_bins, Metadata
+from util import top_k, top_k_bins, Metadata, dense_top_k
 
 
 def do_bm25_search(
@@ -180,31 +180,24 @@ def do_bm25_search(
 def do_dense_search(
         k: int,
         filter_k: int,
-        search: BM25,
-        documents: List[str],
-        retriever: DenseRetriever
+        search: BM25
 ):
     logging.info(
         f"The total number of files is {0xDEADBEEF} and the alphabet size is {len(search.vocab_dict.keys())}"
     )
 
+    alphabet = search.vocab_dict
 
-    retriever.encode_documents()
-
-    results = retriever.retrieve(query, top_k=3)
-
-    # Print the results
-    for i, result in enumerate(results):
-        logging.debug(f"Result {i + 1} (Score: {result['score']:.4f})")
-        logging.debug(result['document']['text'])
+    dense_results = dense_top_k(k, search, filter_k, alphabet)
 
 
     # Get top_k results
-    top_k_res = top_k(k, search, filter_k)
+    top_k_res = top_k(k, search, filter_k, alphabet)
     logging.info("Top K Done")
 
     # Plot histogram for top k results
     overlap_histogram(
+        list(dense_results.values()),
         list(top_k_res.values()),
         True,
         "Top K (No bins)",

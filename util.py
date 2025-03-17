@@ -85,10 +85,78 @@ def top_dense(
 
     return results
 
+
+def dense_top_k(
+        k: int,
+        retriever: DenseRetriever,
+        filter_k: int,
+        alphabet: dict[str, int]
+) -> Dict[str, Set[int]]:
+    """
+    Performs dense top-k search for each word in the alphabet and filters results.
+
+    Args:
+        k: Number of results to retrieve per word (the k in top-k)
+        retriever: Dense retriever to query
+        filter_k: Minimum number of results required to keep a word
+        alphabet: Dictionary mapping words to their token IDs
+
+    Returns:
+        Dict mapping words to sets of matching document IDs
+    """
+    results = {}
+
+    # Track duplicates for logging
+    counting_duplicates = defaultdict(int)
+    num_items = 0
+
+    for word in tqdm(alphabet.keys()):
+        # Get search results for this word
+        search_results = retriever.retrieve(word, k)
+
+        document_ids = [result[0] if isinstance(result, tuple) else result for result in search_results]
+
+        logging.debug(f"word: {word}, results: {search_results}")
+
+        # Filter out words with too few results
+        if len(document_ids) < filter_k:
+            continue
+
+        doc_ids = list(set(document_ids))
+
+        # Process the results
+        for doc_id in doc_ids:
+            if word not in results:
+                results[word] = set()
+
+            results[word].add(doc_id)
+
+            # Count items and track duplicates
+            num_items += 1
+            if doc_id in counting_duplicates:
+                counting_duplicates[doc_id] += 1
+            else:
+                counting_duplicates[doc_id] = 0
+
+    # Log summary information
+    total_duplicates = sum(counting_duplicates.values())
+    logging.info(
+        f"Dense Top-K done. Total number of duplicates: {total_duplicates}, "
+        f"total items in bins: {num_items}"
+    )
+
+    if results:  # Avoid division by zero
+        avg_items_per_bin = sum(len(item_set) for item_set in results.values()) / len(results)
+        logging.info(f"The average number of items in bins is {avg_items_per_bin}")
+
+    return results
+
+
 def top_k(
         k: int,
         search_engine: BM25,
         filter_k: int,
+        alphabet: dict[str, int]
 ) -> Dict[str, Set[int]]:
     """
     Performs top-k search for each word in the alphabet and filters results.
@@ -105,7 +173,6 @@ def top_k(
         Dict mapping words to sets of matching document IDs
     """
     results = {}
-    alphabet = search_engine.vocab_dict
 
 
     # Track duplicates for logging
