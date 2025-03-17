@@ -198,8 +198,8 @@ def do_dense_search(
 
     # Plot histogram for top k results
     overlap_histogram(
-        list(dense_results.values()),
-        list(top_k_res.values()),
+        dense_results,
+        top_k_res,
         False,
         "Top K BM25 and Dense Retriever Comparison",
         40

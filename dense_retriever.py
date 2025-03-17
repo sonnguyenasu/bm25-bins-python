@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 
 class DenseRetriever:
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", filepath: str = "./nyt_processed_regex.jsonl"):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", filepath: str = "./nyt_processed_regex.jsonl", device: str = "cpu"):
         """
         Initialize the dense retriever with a pre-trained sentence transformer model.
 
@@ -16,7 +16,8 @@ class DenseRetriever:
             model_name: The name of the sentence transformer model to use.
                         Default is 'all-MiniLM-L6-v2' which is one of the few models I can run locally and is also popular
         """
-        self.model = SentenceTransformer(model_name)
+        self.device = device
+        self.model = SentenceTransformer(model_name).to(device)
         self.documents = []
         self.document_embeddings = None
         self.load_jsonl(filepath)

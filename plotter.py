@@ -5,6 +5,7 @@ from config_classes import dataclass
 from typing import List, Set, Tuple
 from tabulate import tabulate
 
+
 from util import Metadata
 
 
@@ -85,40 +86,37 @@ def fullness_histogram(
 
 
 def overlap_histogram(
-        histogram1: List[Set[int]],
-        histogram2: List[Set[int]],
+        histogram1: dict[str, set[int]],
+        histogram2: dict[str, set[int]],
         sorted: bool,
         title: str,
         granularity: int
 ) -> None:
     """
-    Takes in two lists of sets and plots a histogram showing the overlap between them
+    Takes in two dictionaries mapping strings to sets of ints and plots a histogram
+    showing the overlap between them
 
     Args:
-        histogram1: First list of 'bins', each bin should be a set of document IDs
-        histogram2: Second list of 'bins', each bin should be a set of document IDs
+        histogram1: First dictionary where keys are strings and values are sets of document IDs
+        histogram2: Second dictionary where keys are strings and values are sets of document IDs
         sorted: If set to true, puts the bins with largest overlap on the left
         title: Title for the histogram
         granularity: Number of groups to consolidate bins into
     """
-    # Make copies to avoid modifying the originals
-    h1 = histogram1.copy()
-    h2 = histogram2.copy()
 
-    # Ensure both histograms have the same length
-    max_len = max(len(h1), len(h2))
-    if len(h1) < max_len:
-        h1.extend([set() for _ in range(max_len - len(h1))])
-    if len(h2) < max_len:
-        h2.extend([set() for _ in range(max_len - len(h2))])
 
-    # Calculate overlap for each bin
+    # Get all unique keys from both dictionaries
+    all_keys = set(histogram1.keys()).union(histogram2.keys())
+
+    # Calculate overlap for each key
     overlaps = []
     total_overlap = 0
 
-    for idx, (set1, set2) in enumerate(zip(h1, h2)):
+    for key in all_keys:
+        set1 = histogram1.get(key, set())
+        set2 = histogram2.get(key, set())
         overlap = len(set1.intersection(set2))
-        overlaps.append((idx, overlap))
+        overlaps.append((key, overlap))
         total_overlap += overlap
 
     # Sort by overlap size if requested
@@ -126,19 +124,21 @@ def overlap_histogram(
         overlaps.sort(key=lambda x: x[1], reverse=True)
 
     # Consolidate bins into groups based on granularity
-    target_bins = granularity
+    target_bins = min(granularity, len(overlaps))
     bins_per_group = int(np.ceil(len(overlaps) / target_bins))
     consolidated_bins = []
 
     for idx, chunk in enumerate([overlaps[i:i + bins_per_group]
                                  for i in range(0, len(overlaps), bins_per_group)]):
         total = sum(count for _, count in chunk)
-        consolidated_bins.append((idx, total))
+        # Store the keys in this group for potential labeling
+        keys_in_group = [key for key, _ in chunk]
+        consolidated_bins.append((idx, total, keys_in_group))
 
     # Plot the histogram
     fig, ax = plt.subplots(figsize=(10, 7.5))
-    x_values = [idx for idx, _ in consolidated_bins]
-    y_values = [count for _, count in consolidated_bins]
+    x_values = [idx for idx, _, _ in consolidated_bins]
+    y_values = [count for _, count, _ in consolidated_bins]
 
     max_count = max(y_values) if y_values else 0
     y_max = int(max_count * 1.1)  # Add 10% margin

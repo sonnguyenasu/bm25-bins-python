@@ -116,10 +116,10 @@ def dense_top_k(
         logging.debug(f"word: {word}, results: {search_results}")
 
         # Filter out words with too few results
-        if len(document_ids) < filter_k:
+        if len(document_ids[0]) < filter_k:
             continue
 
-        doc_ids = list(set(document_ids))
+        doc_ids = list(set(document_ids[0]))
 
         # Process the results
         for doc_id in doc_ids:
