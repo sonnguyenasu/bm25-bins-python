@@ -7,7 +7,7 @@ from bm25s import BM25
 from dense_retriever import DenseRetriever
 # Import the modules we've defined in the previous artifacts
 # Assuming these functions are defined in their respective modules
-from plotter import fullness_histogram, print_table, overlap_histogram
+from plotter import fullness_histogram, print_table, overlap_histogram, analyze_doc_id_frequency
 from util import top_k, top_k_bins, Metadata, dense_top_k
 
 
@@ -32,7 +32,7 @@ def do_bm25_search(
 
 
     # Get top_k results
-    top_k_res = top_k(k, search, filter_k)
+    top_k_res = top_k(k, search, filter_k, search.vocab_dict)
     logging.info("Top K Done")
 
     # Plot histogram for top k results
@@ -43,8 +43,10 @@ def do_bm25_search(
         30
     )
 
-    max_bins = len(top_k_res.values()) // 10
+    analyze_doc_id_frequency(top_k_res)
 
+    max_bins = len(top_k_res.values()) // 10
+    return
     # Create default config
     config = Config(
         k=10,

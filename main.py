@@ -3,7 +3,7 @@ import logging
 import torch
 
 from dense_retriever import DenseRetriever
-from experiments import do_dense_search
+from experiments import do_dense_search, do_bm25_search
 from dataloader import load_nyt, process_text
 import bm25s
 import time
@@ -41,8 +41,8 @@ if __name__ == "__main__":
 
     dense_retriever = DenseRetriever(filepath=filename, device=device)
 
-    #do_bm25_search(10, 10, retriever)
-    do_dense_search(10, 2, retriever, dense_retriever)
+    do_bm25_search(10, 10, retriever)
+    do_dense_search(10, 10, retriever, dense_retriever)
 
 
 

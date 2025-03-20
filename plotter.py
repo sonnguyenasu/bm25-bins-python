@@ -1,8 +1,9 @@
+from collections import Counter
+
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 from config_classes import dataclass
-from typing import List, Set, Tuple
 from tabulate import tabulate
 
 
@@ -21,7 +22,7 @@ class ExperimentResult:
 
 
 def fullness_histogram(
-        histogram: List[Set[int]],
+        histogram: list[set[int]],
         sorted: bool,
         title: str,
         granularity: int
@@ -84,6 +85,59 @@ def fullness_histogram(
 
     print(f"Histogram saved to {output}")
 
+
+def analyze_doc_id_frequency(results: dict[str, set[int]]) -> Counter[int]:
+    """
+    Analyzes and visualizes the frequency of document IDs across all search results.
+
+    Args:
+        results: Dictionary mapping words to sets of matching document IDs (output from top_k function)
+
+    Returns:
+        The counter that counted the number of documents across all search results
+    """
+    # Change from set into list and flatten. Should make it easier to count
+    all_doc_ids = []
+    for word, doc_id_set in results.items():
+        all_doc_ids.extend(list(doc_id_set))
+
+    # Count frequency of each document ID
+    doc_id_counter = Counter(all_doc_ids)
+
+    # Sort by document ID for clearer visualization
+    sorted_items = sorted(doc_id_counter.items())
+    doc_ids, frequencies = zip(*sorted_items) if sorted_items else ([], [])
+
+    # Calculate statistics
+    total_docs = len(doc_id_counter)
+    max_frequency = max(frequencies) if frequencies else 0
+    avg_frequency = sum(frequencies) / len(frequencies) if frequencies else 0
+
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.bar(range(len(doc_ids)), frequencies, alpha=0.7)
+    plt.xlabel('Document ID Index (sorted by ID)')
+    plt.ylabel('Frequency')
+    plt.title(f'Document ID Frequency Distribution\n(Total unique docs: {total_docs}, Avg freq: {avg_frequency:.2f})')
+
+    # Add a histogram of the frequencies themselves
+    plt.subplot(1, 2, 2)
+    bins = np.arange(1, max_frequency + 2) - 0.5
+    plt.hist(frequencies, bins=bins, alpha=0.7)
+    plt.xlabel('Frequency')
+    plt.ylabel('Count')
+    plt.title('Histogram of Document ID Frequencies')
+    plt.savefig("figures/doc_id_frequency.png")
+
+    plt.tight_layout()
+    plt.show()
+
+    # Print some additional statistics
+    print(f"Total unique document IDs: {total_docs}")
+    print(f"Most common document ID: {doc_id_counter.most_common(1)[0][0]} (appears {max_frequency} times)")
+    print(f"Average appearance per document ID: {avg_frequency:.2f}")
+
+    return doc_id_counter
 
 def overlap_histogram(
         histogram1: dict[str, set[int]],
@@ -169,8 +223,8 @@ def overlap_histogram(
 
 
 def print_table(
-        experiment_names: List[str],
-        metadata_vec: List[Metadata]
+        experiment_names: list[str],
+        metadata_vec: list[Metadata]
 ) -> None:
     """
     Prints a table to the terminal for displaying experiment metadata
