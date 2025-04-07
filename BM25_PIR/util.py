@@ -1,6 +1,6 @@
 import hashlib
 import struct
-from config_classes import dataclass, Metadata, Config
+from BM25_PIR.config_classes import dataclass, Metadata, Config
 from typing import Tuple, Union, Any, Literal
 from typing import List, Set
 

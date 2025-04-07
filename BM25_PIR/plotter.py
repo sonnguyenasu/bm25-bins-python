@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from config_classes import dataclass
+from BM25_PIR.config_classes import dataclass
 from typing import List, Set, Tuple
 from tabulate import tabulate
 
-from util import Metadata
+from BM25_PIR.util import Metadata
 
 
 @dataclass
@@ -74,7 +74,7 @@ def fullness_histogram(
     ax.grid(False)
 
     # Create directory if it doesn't exist
-    os.makedirs('figures', exist_ok=True)
+    os.makedirs('../figures', exist_ok=True)
 
     # Save the figure
     output = f"figures/{title}_histogram.png"

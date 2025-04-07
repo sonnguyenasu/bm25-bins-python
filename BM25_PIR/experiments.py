@@ -1,13 +1,11 @@
 import logging
 from typing import Set, List, Dict, Any
-from config_classes import dataclass, Config
 
 from bm25s import BM25
 
-# Import the modules we've defined in the previous artifacts
-# Assuming these functions are defined in their respective modules
-from plotter import fullness_histogram, print_table
-from util import top_k, top_k_bins, Metadata
+from BM25_PIR.config_classes import Config
+from BM25_PIR.plotter import fullness_histogram, print_table
+from BM25_PIR.util import top_k, top_k_bins, Metadata
 
 
 def do_search(
