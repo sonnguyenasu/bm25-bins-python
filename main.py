@@ -38,7 +38,7 @@ def bm25_d_choice_experiment():
     # metadata, results = top_k_bins(retriever,
     #   config)
 
-def bm25_sanity_experiment():
+def bm25_sanity_experiment_squad():
     logging.info("Loading SQUAD dataset")
 
     squad_dataset = load_dataset("rajpurkar/squad_v2", split='validation')
@@ -76,8 +76,8 @@ def bm25_sanity_experiment():
     logging.info(f"Total unique questions:{len(question_answers)}")
 
     logging.info("Starting classic BM25 test")
-    token_res = tokenised_BM25(squad_dataset, 20, retriever, stemmer, corpus_list, 5000)
-    classic_res = classic_BM25(squad_dataset, 20, retriever, stemmer, corpus_list, 5000)
+    token_res = tokenised_BM25(squad_dataset, 10, retriever, stemmer, corpus_list, 500)
+    classic_res = classic_BM25(squad_dataset, 10, retriever, stemmer, corpus_list, 500)
 
     average_classic = sum(classic_res) / len(classic_res)
     print(average_classic)
@@ -93,5 +93,5 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    bm25_sanity_experiment()
+    bm25_sanity_experiment_squad()
 
