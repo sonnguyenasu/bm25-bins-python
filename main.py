@@ -175,4 +175,5 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    bm25_sanity_experiment_marco_dev()
+    #bm25_sanity_experiment_marco_dev()
+    bm25_sanity_experiment_squad()
