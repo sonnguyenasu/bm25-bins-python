@@ -81,7 +81,7 @@ def bm25_sanity_experiment_squad():
     logging.info(f"Total unique questions:{len(question_answers)}")
 
     logging.info("Starting classic BM25 test")
-    token_res = tokenised_BM25(squad_dataset, 10, retriever, stemmer, corpus_list, 500)
+    token_res, _mrr = tokenised_BM25(squad_dataset, 10, retriever, stemmer, corpus_list, 500)
     classic_res = classic_BM25(squad_dataset, 10, retriever, stemmer, corpus_list, 500)
 
     average_classic = sum(classic_res) / len(classic_res)
@@ -149,7 +149,7 @@ def bm25_sanity_experiment_marco_dev():
 
     logging.info("Starting BM25 evaluation")
 
-    token_res = tokenised_BM25(dataset, 10, retriever, stemmer, corpus_list, 500)
+    token_res, mrr = tokenised_BM25(dataset, 10, retriever, stemmer, corpus_list, 500)
     classic_res = classic_BM25(dataset, 10, retriever, stemmer, corpus_list, 500)
 
     average_classic = sum(classic_res) / len(classic_res)
@@ -158,6 +158,9 @@ def bm25_sanity_experiment_marco_dev():
     average_tokens = sum(token_res) / len(token_res)
     print("Average Tokenised BM25 score:", average_tokens)
 
+    average_mrr = sum(mrr) / len(mrr)
+    print("Average Tokenised BM25 MRR:", average_mrr)
+
 if __name__ == "__main__":
     # Configure logging
     logging.basicConfig(
@@ -165,5 +168,5 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    #bm25_sanity_experiment_marco_dev()
-    bm25_sanity_experiment_squad()
+    bm25_sanity_experiment_marco_dev()
+    #bm25_sanity_experiment_squad()

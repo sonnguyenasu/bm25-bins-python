@@ -2,6 +2,7 @@ import bm25s
 from Stemmer import Stemmer
 from bm25s import BM25
 from datasets import load_dataset, Dataset
+from sklearn.metrics import recall_score
 
 from BM25_PIR.dataloader import process_text
 
@@ -76,6 +77,7 @@ def tokenised_BM25(dataset: Dataset, k: int,
 
 
     f1_scores = []
+    mrr_score = []
 
     for example in dataset.select(range(samples_to_test)):
         question = example['question']
@@ -122,7 +124,9 @@ def tokenised_BM25(dataset: Dataset, k: int,
         false_negatives = k - true_positives
 
         f1_scores.append((2 * true_positives) / ((2 * true_positives) + false_positives + false_negatives))
+        if true_positives > 0:
+            mrr_score.append(1)
 
-    return f1_scores
+    return f1_scores, mrr_score
 
 
