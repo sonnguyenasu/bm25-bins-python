@@ -15,7 +15,6 @@ from collections import defaultdict
 import ir_datasets
 
 from BM25_sanity_check.experiments import classic_BM25, tokenised_BM25
-from BM25_sanity_check.make_embeddings import embed_and_export_fvecs
 
 
 def bm25_d_choice_experiment():
@@ -80,15 +79,6 @@ def bm25_sanity_experiment_squad():
 
     logging.info(f"Total sentences extracted: {len(corpus)}")
     logging.info(f"Total unique questions:{len(question_answers)}")
-
-    # Export th embeddings as vectors
-    logging.info("Exporting embeddings to fvecs files...")
-    questions = list(question_answers.keys())
-    embed_and_export_fvecs(
-        corpus_sentences=corpus_list,
-        questions=questions,
-        out_prefix="squad_val",
-    )
 
     logging.info("Starting classic BM25 test")
     token_res = tokenised_BM25(squad_dataset, 10, retriever, stemmer, corpus_list, 500)
