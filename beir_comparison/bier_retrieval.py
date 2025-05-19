@@ -22,15 +22,8 @@ class RegularBM25(BaseSearch):
         corpus_token = process_text(corpus, self.stemmer)
         bm25.index(corpus_token)
 
-
-        # tokens, doc_ids = self.build_index(corpus, self.stemmer)
-        # bm25 = BM25(backend=self.backend)
-        # bm25.index(tokens)
-
         doc_ids = list(corpus.keys())  # index → doc-ID
         results = {}
-
-
 
         for qid, query in queries.items():
             query_tok = bm25s.tokenize(query, self.stemmer)
@@ -119,7 +112,7 @@ class TokenizedBM25Retriever(BaseSearch):
 
 if __name__ == "__main__":
     #### Load dataset
-    dataset = "scifact"
+    dataset = "msmarco"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     out_dir = f"/mnt/nextcloud/10TB-STHDD/datasets/{dataset}"
     data_path = util.download_and_unzip(url, out_dir)
