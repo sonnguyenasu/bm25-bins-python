@@ -135,8 +135,6 @@ class ngramBM25Retriever(BaseSearch):
 
         print("Beginning ngram BM25")
 
-
-
         keywords = set()
 
         for item in corpus.values():
@@ -189,7 +187,7 @@ class ngramBM25Retriever(BaseSearch):
                 # Find the word in the key with the highest unigram score
                 words = best_key.split()
                 best_word = max(words, key=lambda w: unigram_scores.get(w, float('-inf')))
-                max_score = unigram_scores.get(best_word, float('-inf'))
+                max_score = unigram_scores.get(best_word)
 
                 # Remove the current best_key
                 del hits[best_key]
@@ -198,14 +196,14 @@ class ngramBM25Retriever(BaseSearch):
                 for key, val in hits.items():
                     if sum(val.values()) > max_score:
                         # New best key found
-                        best_word = max(key.split(), key=lambda w: unigram_scores.get(w, float('-inf')))
-                        return key, best_word
+                        best_key = key
+                        break
 
                 # No better key found, pick a random one from remaining
-                if hits:
+                if hits and best_score < max_score:
                     random_key = random.choice(list(hits.keys()))
                     random_word = max(random_key.split(), key=lambda w: unigram_scores.get(w, float('-inf')))
-                    return random_key, random_word
+                    best_key = random_key
 
 
             logging.debug(f"Best key:, {best_key}")
