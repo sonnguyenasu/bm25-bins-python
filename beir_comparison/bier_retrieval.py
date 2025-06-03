@@ -18,7 +18,7 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 
 class RegularBM25(BaseSearch):
     def __init__(self,
-                 hostname: str = "http://localhost:9200",
+                 hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  shards: int = 1):
@@ -48,7 +48,7 @@ class RegularBM25(BaseSearch):
 
 class TokenizedBM25Retriever(BaseSearch):
     def __init__(self,
-                 hostname: str = "http://localhost:9200",
+                 hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  shards: int = 1):
@@ -101,7 +101,7 @@ class TokenizedBM25Retriever(BaseSearch):
 
 class ngramBM25Retriever(BaseSearch):
     def __init__(self,
-                 hostname: str = "http://localhost:9200",
+                 hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  n: int = 2,
