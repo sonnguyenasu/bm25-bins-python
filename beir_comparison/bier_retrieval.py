@@ -147,25 +147,37 @@ class ngramBM25Retriever(BaseSearch):
         for word in keywords:
             queries[f"{word}"] = f"{word}"
 
-        hits = self.bm25.search(corpus, queries, top_k, score_function)
+        unigram_hits = self.bm25.search(corpus, queries, top_k, score_function)
 
         unigram_scores = {}
-        for key, val in hits.items():
+        for key, val in unigram_hits.items():
             score = sum(val.values())
             logging.debug(f"{key}, {score}")
             unigram_scores[key] = score
 
-
+        final_hits = {}
+        ngram_lookup = {}
         while keywords:
-            word = keywords.pop()
-            logging.debug(f"Removed:{word}")
+            leftovers = set()
 
             queries = {}
             i = 0
-            for word_2 in keywords:
-                #PLAIN-2: {'MED-10': 25.226639, 'MED-1193': 19.714224, 'MED-1207': 14.95818, 'MED-14': 24.935198, 'MED-2427': 18.497639, 'MED-2428': 21.614073, 'MED-2429': 25.438505, 'MED-2431': 20.217152, 'MED-3204': 18.000595, 'MED-4827': 18.001968, 'MED-4830': 15.799666}
+            # Todo: The way this should work is that you just randomly choose all the words and their pairs. Then compare
+            # the score to their unigram scoreas and break up any items that don't match the max unigram score
+            while True:
 
-                queries[f"{word} {word_2}"] = f"{word} {word_2}"
+                if len(keywords) <= self.n:
+                    words = " ".join(keywords)
+                    queries[words] = words
+                    break
+
+                words = ""
+                for i in range(self.n):
+                    word = keywords.pop()
+                    words = words + (word + " ")
+
+                ngram_lookup[words[0]] = words
+                queries[words[0]] = words
 
             hits = self.bm25.search(corpus, queries, top_k, score_function)
 
@@ -180,27 +192,33 @@ class ngramBM25Retriever(BaseSearch):
             hits_clone = deepcopy(hits)
 
             while hits:
-                # Find the key with the highest total hit score
-                best_key = max(hits, key=lambda k: sum(hits[k].values()))
-                best_score = sum(hits[best_key].values())
+                # check if each hit surpasses its unigram score
+                random_key = random.choice(list(hits.keys()))
+                logging.debug(f"Random key: {random_key}")
+                original_query = ngram_lookup[random_key]
+
+                random_score = sum(hits[random_key].values())
 
                 # Find the word in the key with the highest unigram score
-                words = best_key.split()
-                best_word = max(words, key=lambda w: unigram_scores.get(w, float('-inf')))
-                max_score = unigram_scores.get(best_word)
+                words = original_query.split()
+                best_random_word = max(words, key=lambda w: unigram_scores.get(w))
+                best_score = max_unigram_score = unigram_scores.get(best_random_word)
 
-                # Remove the current best_key
-                del hits[best_key]
+                # Remove the current key
+                del hits[random_key]
+
+                #TODO check if the combine query better than unigram query, if not, kill
 
                 # Try to find a new key whose total score beats the unigram max_score
                 for key, val in hits.items():
-                    if sum(val.values()) > max_score:
+                    current_score = sum(val.values())
+                    if current_score >= best_score:
                         # New best key found
                         best_key = key
-                        break
+                        best_score = current_score
 
                 # No better key found, pick a random one from remaining
-                if hits and best_score < max_score:
+                if hits and best_score < max_unigram_score:
                     random_key = random.choice(list(hits.keys()))
                     random_word = max(random_key.split(), key=lambda w: unigram_scores.get(w, float('-inf')))
                     best_key = random_key
@@ -240,7 +258,7 @@ def main():
     logging.basicConfig(
         format="%(asctime)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.ERROR,
+        level=logging.DEBUG,
         handlers=[LoggingHandler()],
     )
 
