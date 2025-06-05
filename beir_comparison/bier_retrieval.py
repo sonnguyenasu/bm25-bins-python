@@ -278,7 +278,7 @@ def main():
     model = ngramBM25Retriever(n=5)
     model = RegularBM25()
 
-    retriever = EvaluateRetrieval(model, k_values=[10])
+    retriever = EvaluateRetrieval(model, k_values=[1, 5, 10, 20, 100])
     results = retriever.retrieve(corpus, queries)
 
     logging.info(f"Evaluation for k in {retriever.k_values}")
