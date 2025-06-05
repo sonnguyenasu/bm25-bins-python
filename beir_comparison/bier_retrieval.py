@@ -107,14 +107,12 @@ class ngramBM25Retriever(BaseSearch):
                  n: int = 2,
                  shards: int = 1):
         super().__init__()
-        self.bm25 = BM25Search(
-            index_name=index_name,
-            hostname=hostname,
-            initialize=initialize,
-            number_of_shards=shards,
-            retry_on_timeout=True,
-            timeout=600
-        )
+
+        self.index_name = index_name
+        self.hostname = hostname
+        self.initialize = initialize
+        self.shards = shards
+
         logging.info(f"[TokenizedBM25] ES host={hostname}, index={index_name}")
         self.n = n
 
@@ -126,7 +124,7 @@ class ngramBM25Retriever(BaseSearch):
                **kwargs
                ) -> dict[str, dict[str, float]]:
 
-        results: dict[str, dict[str, float]] = {}
+        original_queries = queries.copy()
 
         # corpus is a str of DOC IDs mapping to a dict of 'text' and 'title'
         # queries are QUERY IDs mapping to the query
@@ -138,8 +136,8 @@ class ngramBM25Retriever(BaseSearch):
         keywords = set()
 
         for item in corpus.values():
-            keywords.update(item["title"].split())
-            keywords.update(item["text"].split())
+            keywords.update(item["title"].split(" "))
+            keywords.update(item["text"].split(" "))
 
         # to ensure that no score drags any others down, we do an unigram analysis
 
@@ -147,7 +145,16 @@ class ngramBM25Retriever(BaseSearch):
         for word in keywords:
             queries[f"{word}"] = f"{word}"
 
-        unigram_hits = self.bm25.search(corpus, queries, top_k, score_function)
+        unigram_bm25 = BM25Search(
+            index_name=self.index_name,
+            hostname=self.hostname,
+            initialize=self.initialize,
+            number_of_shards=self.shards,
+            retry_on_timeout=True,
+            timeout=600
+        )
+
+        unigram_hits = unigram_bm25.search(corpus, queries, top_k, score_function)
 
         unigram_scores = {}
         for key, val in unigram_hits.items():
@@ -161,94 +168,90 @@ class ngramBM25Retriever(BaseSearch):
             leftovers = set()
 
             queries = {}
-            i = 0
             # Todo: The way this should work is that you just randomly choose all the words and their pairs. Then compare
             # the score to their unigram scoreas and break up any items that don't match the max unigram score
             while True:
 
                 if len(keywords) <= self.n:
+                    if len(keywords) == 0:
+                        break
                     words = " ".join(keywords)
-                    queries[words] = words
+                    key = words.split(" ")[0]  # first token
+                    ngram_lookup[key] = words
+                    queries[key] = words
                     break
 
                 words = ""
-                for i in range(self.n):
+                for i in range(self.n - 1):
                     word = keywords.pop()
                     words = words + (word + " ")
 
-                ngram_lookup[words[0]] = words
-                queries[words[0]] = words
+                word = keywords.pop()
+                words = words + word
+                ngram_lookup[words.split(" ")[0]] = words
+                queries[words.split(" ")[0]] = words
 
-            hits = self.bm25.search(corpus, queries, top_k, score_function)
+            ngram_bm25 = BM25Search(
+                index_name=self.index_name,
+                hostname=self.hostname,
+                initialize=self.initialize,
+                number_of_shards=self.shards,
+                retry_on_timeout=True,
+                timeout=600
+            )
 
-            # best_key = max(hits, key=lambda k: sum(hits[k].values()))
-            # best_score = sum(hits[best_key].values())
-            #
-            # best_word = max(best_key.split(), key=lambda w: unigram_scores[w])
-            # max_score = unigram_scores[best_word]
-            #
-            # found = False
+            hits = ngram_bm25.search(corpus, queries, top_k, score_function)
 
-            hits_clone = deepcopy(hits)
-
-            while hits:
+            for key in hits.keys():
                 # check if each hit surpasses its unigram score
-                random_key = random.choice(list(hits.keys()))
-                logging.debug(f"Random key: {random_key}")
-                original_query = ngram_lookup[random_key]
-
-                random_score = sum(hits[random_key].values())
+                original_query = ngram_lookup[key]
 
                 # Find the word in the key with the highest unigram score
-                words = original_query.split()
-                best_random_word = max(words, key=lambda w: unigram_scores.get(w))
-                best_score = max_unigram_score = unigram_scores.get(best_random_word)
+                words = original_query.split(" ")
+                best_random_word = max(words, key=lambda w: unigram_scores.get(w, -1))
+                max_unigram_score = unigram_scores.get(best_random_word)
+                ngram_score = sum(hits[key].values())
 
-                # Remove the current key
-                del hits[random_key]
-
-                #TODO check if the combine query better than unigram query, if not, kill
-
-                # Try to find a new key whose total score beats the unigram max_score
-                for key, val in hits.items():
-                    current_score = sum(val.values())
-                    if current_score >= best_score:
-                        # New best key found
-                        best_key = key
-                        best_score = current_score
-
-                # No better key found, pick a random one from remaining
-                if hits and best_score < max_unigram_score:
-                    random_key = random.choice(list(hits.keys()))
-                    random_word = max(random_key.split(), key=lambda w: unigram_scores.get(w, float('-inf')))
-                    best_key = random_key
+                if ngram_score >= max_unigram_score:
+                    final_hits[key] = hits[key]
+                else:
+                    # Add these back into the pool
+                    leftovers.add(words)
+            keywords = leftovers
 
 
-            logging.debug(f"Best key:, {best_key}")
-            logging.debug(f"Total score:, {best_score}")
+        aggregated_results: dict[str, dict[str, float]] = {}
 
-        for qid, query in queries.items():
-            # 1) word-level retrieval on the full index
-            merged_doc_ids: set[str] = set()
-            for word in query.split():
-                if not isinstance(word, str) and not word.strip():
-                    continue
-                hits = self.bm25.search(corpus, {qid: word}, top_k, score_function)[qid]
-                merged_doc_ids.update(hits.keys())
+        for qid, query_text in original_queries.items():
+            tokens = query_text.split()  # whitespace tokenisation
+            doc_scores: dict[str, float] = {}
 
+            # slide a window of size self.n over the query
+            for i in range(len(tokens) - self.n + 1):
+                ngram = " ".join(tokens[i: i + self.n])
+                key = ngram.split(" ")[0]  # ← same transform you used earlier
 
+                # if we produced hits for that key, merge them in
+                if key in final_hits:
+                    for doc_id, score in final_hits[key].items():
+                        doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + score  # sum; use max() if preferred
 
-            # 2) build the sub-corpus of all docs seen above
-            sub_corpus = {doc_id: corpus[doc_id]
-                          for doc_id in merged_doc_ids}
+            # optional fallback: if the query had no matching n-grams, fall back to its best unigram
+            if not doc_scores:
+                for token in tokens:
+                    if token in unigram_hits:
+                        for doc_id, score in unigram_hits[token].items():
+                            doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + score
+                        break  # take only the first token that exists
 
-            print("Sub-corpus built")
+            # keep only the top-k documents for this query
+            if doc_scores:
+                top_docs = dict(
+                    sorted(doc_scores.items(), key=lambda t: t[1], reverse=True)[: top_k]
+                )
+                aggregated_results[qid] = top_docs
 
-            # 3) final full-query retrieval on that sub-corpus
-            final_hits = self.bm25.search(sub_corpus, {qid: query}, top_k, score_function)[qid]
-            results[qid] = final_hits
-
-        return results
+        return aggregated_results
 
 
 
@@ -271,8 +274,8 @@ def main():
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
 
-    model = ngramBM25Retriever(n=2)
-    # model = RegularBM25()
+    model = ngramBM25Retriever(n=5)
+    #model = RegularBM25()
 
     retriever = EvaluateRetrieval(model, k_values=[10])
     results = retriever.retrieve(corpus, queries)
