@@ -20,7 +20,7 @@ TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)   # letters + digits
 
 def tokenize(text: str) -> list[str]:
     """Lower-case, drop punctuation, collapse whitespace."""
-    #return TOKEN_RE.findall(text.lower())
+    return TOKEN_RE.findall(text.lower())
     return text.split(" ")
 
 class RegularBM25(BaseSearch):
@@ -283,7 +283,7 @@ def main():
 
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
-    for i in [2, 3, 4, 5, 10, 20]:
+    for i in [1, 2, 3, 4, 5, 10, 20]:
 
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
