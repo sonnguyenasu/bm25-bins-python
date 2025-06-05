@@ -275,7 +275,7 @@ def main():
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
 
-    model = ngramBM25Retriever(n=5)
+    model = ngramBM25Retriever(n=1)
     model = RegularBM25()
 
     retriever = EvaluateRetrieval(model, k_values=[1, 5, 10, 20, 100])
