@@ -20,7 +20,8 @@ TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)   # letters + digits
 
 def tokenize(text: str) -> list[str]:
     """Lower-case, drop punctuation, collapse whitespace."""
-    return TOKEN_RE.findall(text.lower())
+    #return TOKEN_RE.findall(text.lower())
+    return text.split(" ")
 
 class RegularBM25(BaseSearch):
     def __init__(self,
@@ -133,6 +134,7 @@ class ngramBM25Retriever(BaseSearch):
                ) -> dict[str, dict[str, float]]:
 
         original_queries = deepcopy(queries)
+        original_queries = {qid: " ".join(tokenize(q)) for qid, q in original_queries.items()}
         original_corpus = deepcopy(corpus)
 
         # corpus is a str of DOC IDs mapping to a dict of 'text' and 'title'
@@ -174,7 +176,8 @@ class ngramBM25Retriever(BaseSearch):
 
         final_hits = {}
         ngram_lookup = {}
-        cooling = 1.0
+        cooling = 1.1
+        logging.warning("Keywords: {}".format(len(keywords))) # elasticsearch uses info when it should use debug... so we ahve to use warn!
         while keywords:
             leftovers = set()
 
@@ -187,7 +190,7 @@ class ngramBM25Retriever(BaseSearch):
                     if len(keywords) == 0:
                         break
                     words = " ".join(keywords)
-                    key = tokenize(words[0])  # first token
+                    key = tokenize(words)[0]  # first token
                     ngram_lookup[key] = words
                     queries[key] = words
                     break
@@ -228,8 +231,9 @@ class ngramBM25Retriever(BaseSearch):
                 else:
                     for word in words:
                         leftovers.add(word)
+            logging.warning("Leftovers: {}".format(leftovers))
             keywords = leftovers
-            cooling -= 0.01
+            cooling -= 0.05
 
 
         new_lookup = {}
@@ -272,7 +276,6 @@ def main():
         handlers=[LoggingHandler()],
     )
 
-    dataset = "trec-covid"
     dataset = "quora"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
@@ -280,21 +283,26 @@ def main():
 
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
+    for i in [2, 3, 4, 5, 10, 20]:
 
-    model = ngramBM25Retriever(n=5)
-    # model = RegularBM25()
+        print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
-    retriever = EvaluateRetrieval(model, k_values=[10])
-    results = retriever.retrieve(corpus, queries)
+        model = ngramBM25Retriever(n=i)
+        # model = RegularBM25()
 
-    logging.info(f"Evaluation for k in {retriever.k_values}")
-    ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+        retriever = EvaluateRetrieval(model, k_values=[10, 100])
+        results = retriever.retrieve(corpus, queries)
 
-    print(f"NDCG@{retriever.k_values}    : {ndcg}")
-    print(f"MAP@{retriever.k_values}     : {_map}")
-    print(f"Recall@{retriever.k_values}  : {recall}")
-    print(f"Precision@{retriever.k_values}: {precision}")
+        logging.info(f"Evaluation for k in {retriever.k_values}")
+        ndcg, map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
 
+        mrr = retriever.evaluate_custom(qrels, results, k_values=retriever.k_values, metric="mrr")
+
+        print(f"NDCG@{retriever.k_values}    : {ndcg}")
+        print(f"MAP@{retriever.k_values}     : {map}")
+        print(f"Recall@{retriever.k_values}  : {recall}")
+        print(f"Precision@{retriever.k_values}: {precision}")
+        print(f"MRR@{retriever.k_values}     : {mrr}")
 
 if __name__ == "__main__":
     main()
