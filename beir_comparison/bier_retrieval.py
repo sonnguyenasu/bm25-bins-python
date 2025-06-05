@@ -15,6 +15,12 @@ from beir.retrieval.search.lexical import BM25Search
 from beir.retrieval.search import BaseSearch
 from beir.retrieval.evaluation import EvaluateRetrieval
 
+import re
+TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)   # letters + digits
+
+def tokenize(text: str) -> list[str]:
+    """Lower-case, drop punctuation, collapse whitespace."""
+    return TOKEN_RE.findall(text.lower())
 
 class RegularBM25(BaseSearch):
     def __init__(self,
@@ -139,8 +145,8 @@ class ngramBM25Retriever(BaseSearch):
         keywords = set()
 
         for item in corpus.values():
-            keywords.update(item["title"].split(" "))
-            keywords.update(item["text"].split(" "))
+            keywords.update(tokenize(item["title"]))
+            keywords.update(tokenize(item["text"]))
 
         # to ensure that no score drags any others down, we do an unigram analysis
 
@@ -158,6 +164,7 @@ class ngramBM25Retriever(BaseSearch):
         )
 
         unigram_hits = unigram_bm25.search(corpus, queries, top_k, score_function)
+
 
         unigram_scores = {}
         for key, val in unigram_hits.items():
@@ -180,7 +187,7 @@ class ngramBM25Retriever(BaseSearch):
                     if len(keywords) == 0:
                         break
                     words = " ".join(keywords)
-                    key = words.split(" ")[0]  # first token
+                    key = tokenize(words[0])  # first token
                     ngram_lookup[key] = words
                     queries[key] = words
                     break
@@ -192,8 +199,8 @@ class ngramBM25Retriever(BaseSearch):
 
                 word = keywords.pop()
                 words = words + word
-                ngram_lookup[words.split(" ")[0]] = words
-                queries[words.split(" ")[0]] = words
+                ngram_lookup[tokenize(words)[0]] = words
+                queries[tokenize(words)[0]] = words
 
             ngram_bm25 = BM25Search(
                 index_name=self.index_name,
@@ -211,7 +218,7 @@ class ngramBM25Retriever(BaseSearch):
                 original_query = ngram_lookup[key]
 
                 # Find the word in the key with the highest unigram score
-                words = original_query.split(" ")
+                words = tokenize(original_query)
                 best_random_word = max(words, key=lambda w: unigram_scores.get(w, -1))
                 max_unigram_score = unigram_scores.get(best_random_word)
                 ngram_score = sum(hits[key].values())
@@ -219,21 +226,20 @@ class ngramBM25Retriever(BaseSearch):
                 if ngram_score >= max_unigram_score * cooling:
                     final_hits[key] = hits[key]
                 else:
-                    # Add these back into the pool
                     for word in words:
                         leftovers.add(word)
             keywords = leftovers
-            cooling -= 0.05
+            cooling -= 0.01
 
 
         new_lookup = {}
         new_corpus = {}
-        for key, val in ngram_lookup.items():
-            for word in val.split(" "):
-                new_lookup[word] = final_hits[key]
+        for key, hits in final_hits.items():  # ngramlookup has some dead values
+            for word in tokenize(ngram_lookup[key]):
+                new_lookup[word] = hits
 
         for qid, query_text in original_queries.items():
-            tokens = query_text.split(" ")
+            tokens = tokenize(query_text)
 
             for token in tokens:
                 results = new_lookup.get(token)
@@ -262,12 +268,12 @@ def main():
     logging.basicConfig(
         format="%(asctime)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.DEBUG,
+        level=logging.WARN,
         handlers=[LoggingHandler()],
     )
 
     dataset = "trec-covid"
-    dataset = "nfcorpus"
+    dataset = "quora"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     data_path = util.download_and_unzip(url, out_dir)
@@ -275,10 +281,10 @@ def main():
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
 
-    model = ngramBM25Retriever(n=1)
-    model = RegularBM25()
+    model = ngramBM25Retriever(n=5)
+    # model = RegularBM25()
 
-    retriever = EvaluateRetrieval(model, k_values=[1, 5, 10, 20, 100])
+    retriever = EvaluateRetrieval(model, k_values=[10])
     results = retriever.retrieve(corpus, queries)
 
     logging.info(f"Evaluation for k in {retriever.k_values}")
