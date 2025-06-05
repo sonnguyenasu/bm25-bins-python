@@ -231,7 +231,7 @@ class ngramBM25Retriever(BaseSearch):
                 else:
                     for word in words:
                         leftovers.add(word)
-            logging.warning("Leftovers: {}".format(leftovers))
+            logging.warning("Leftovers: {}".format(len(leftovers)))
             keywords = leftovers
             cooling -= 0.05
 
