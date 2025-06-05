@@ -105,13 +105,15 @@ class ngramBM25Retriever(BaseSearch):
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  n: int = 2,
-                 shards: int = 1):
+                 shards: int = 1,
+                 k = 10):
         super().__init__()
 
         self.index_name = index_name
         self.hostname = hostname
         self.initialize = initialize
         self.shards = shards
+        self.k = k
 
         logging.info(f"[TokenizedBM25] ES host={hostname}, index={index_name}")
         self.n = n
@@ -124,7 +126,8 @@ class ngramBM25Retriever(BaseSearch):
                **kwargs
                ) -> dict[str, dict[str, float]]:
 
-        original_queries = queries.copy()
+        original_queries = deepcopy(queries)
+        original_corpus = deepcopy(corpus)
 
         # corpus is a str of DOC IDs mapping to a dict of 'text' and 'title'
         # queries are QUERY IDs mapping to the query
@@ -164,6 +167,7 @@ class ngramBM25Retriever(BaseSearch):
 
         final_hits = {}
         ngram_lookup = {}
+        cooling = 1.0
         while keywords:
             leftovers = set()
 
@@ -212,48 +216,45 @@ class ngramBM25Retriever(BaseSearch):
                 max_unigram_score = unigram_scores.get(best_random_word)
                 ngram_score = sum(hits[key].values())
 
-                if ngram_score >= max_unigram_score:
+                if ngram_score >= max_unigram_score * cooling:
                     final_hits[key] = hits[key]
                 else:
                     # Add these back into the pool
-                    leftovers.add(words)
+                    for word in words:
+                        leftovers.add(word)
             keywords = leftovers
+            cooling -= 0.05
 
 
-        aggregated_results: dict[str, dict[str, float]] = {}
+        new_lookup = {}
+        new_corpus = {}
+        for key, val in ngram_lookup.items():
+            for word in val.split(" "):
+                new_lookup[word] = final_hits[key]
 
         for qid, query_text in original_queries.items():
-            tokens = query_text.split()  # whitespace tokenisation
-            doc_scores: dict[str, float] = {}
+            tokens = query_text.split(" ")
 
-            # slide a window of size self.n over the query
-            for i in range(len(tokens) - self.n + 1):
-                ngram = " ".join(tokens[i: i + self.n])
-                key = ngram.split(" ")[0]  # ← same transform you used earlier
+            for token in tokens:
+                results = new_lookup.get(token)
 
-                # if we produced hits for that key, merge them in
-                if key in final_hits:
-                    for doc_id, score in final_hits[key].items():
-                        doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + score  # sum; use max() if preferred
+                if results is None: # this word does't appear in our corpus
+                    continue
 
-            # optional fallback: if the query had no matching n-grams, fall back to its best unigram
-            if not doc_scores:
-                for token in tokens:
-                    if token in unigram_hits:
-                        for doc_id, score in unigram_hits[token].items():
-                            doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + score
-                        break  # take only the first token that exists
+                for doc_id, score in results.items():
+                    doc_items = original_corpus.get(doc_id)
+                    new_corpus[doc_id] = doc_items
 
-            # keep only the top-k documents for this query
-            if doc_scores:
-                top_docs = dict(
-                    sorted(doc_scores.items(), key=lambda t: t[1], reverse=True)[: top_k]
-                )
-                aggregated_results[qid] = top_docs
-
-        return aggregated_results
-
-
+        final_bm25 = BM25Search(
+            index_name=self.index_name,
+            hostname=self.hostname,
+            initialize=self.initialize,
+            number_of_shards=self.shards,
+            retry_on_timeout=True,
+            timeout=600
+        )
+        results = final_bm25.search(new_corpus, original_queries, top_k, score_function)
+        return results
 
 
 def main():
@@ -275,7 +276,7 @@ def main():
 
 
     model = ngramBM25Retriever(n=5)
-    #model = RegularBM25()
+    model = RegularBM25()
 
     retriever = EvaluateRetrieval(model, k_values=[10])
     results = retriever.retrieve(corpus, queries)
