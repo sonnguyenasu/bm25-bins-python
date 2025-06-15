@@ -355,6 +355,9 @@ class ngramBM25Retriever_freq(BaseSearch):
 
         for doc_id, score in docs_with_scores.items():
             top_keywords = sorted(score.items(), key=lambda x: x[1], reverse=True)[:self.frequency]
+            wanted_n_gram = top_keywords[:self.n]
+            requested_words[doc_id] =
+
         
 
 
