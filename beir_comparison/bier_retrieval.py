@@ -5,9 +5,10 @@ import logging
 import os
 import pathlib
 import random
-from collections import defaultdict
+from collections import defaultdict, Counter
 from copy import deepcopy
 from itertools import combinations
+from typing import Optional
 
 from beir import LoggingHandler, util
 from beir.datasets.data_loader import GenericDataLoader
@@ -268,6 +269,30 @@ class ngramBM25Retriever(BaseSearch):
         return results
 
 
+def most_common_pairs(requested_words) -> Optional[list[tuple[str, float]]]:
+    """
+    Return **all** keyword-score pairs that share the highest
+    repeat-count across the collection, provided that count ≥ 2.
+    If every pair is unique, return None.
+    """
+    # 1) Flatten every per-doc list into one long list
+    flat_pairs = [pair for pairs in requested_words.values() for pair in pairs]
+
+    # 2) Tally occurrences
+    counts = Counter(flat_pairs)
+
+    # 3) Find the largest repeat-count (>1)
+    if not counts:
+        return None                       # empty input
+    max_freq = max(counts.values())
+    if max_freq == 1:
+        return None                       # nothing repeats
+
+    # 4) Pull out every pair that hits that top frequency
+    return [pair for pair, c in counts.items() if c == max_freq]
+
+
+
 class ngramBM25Retriever_freq(BaseSearch):
     def __init__(self,
                  hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
@@ -351,17 +376,15 @@ class ngramBM25Retriever_freq(BaseSearch):
 
 
         # Mapping from doc id to the list of self.frequency number of ngrams
-        requested_words: dict[str, list[str]] = {}
+        requested_words: dict[str, list[tuple[str, float]]] = {}
 
         for doc_id, score in docs_with_scores.items():
             top_keywords = sorted(score.items(), key=lambda x: x[1], reverse=True)[:self.frequency]
-            wanted_n_gram = top_keywords[:self.n]
-            requested_words[doc_id] =
+            requested_words[doc_id] = []
+            for i in range(0, len(top_keywords)//2, self.n):
+                requested_words[doc_id].append(top_keywords[i:i+self.n])
 
-        
-
-
-
+        most_common_pairs_variable = most_common_pairs(requested_words)
 
 
         new_lookup = {}
@@ -414,7 +437,7 @@ def main():
 
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
-    for i in [1, 2, 3, 4, 5, 10, 20]:
+    for i in [2, 3, 4, 5, 10, 20]:
 
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
