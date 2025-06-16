@@ -358,7 +358,7 @@ class ngramBM25Retriever_freq(BaseSearch):
         )
 
         # We hope that this will produce at least 1 doc per keyword
-        unigram_hits = unigram_bm25.search(corpus, queries, len(corpus.keys()), score_function)
+        unigram_hits = unigram_bm25.search(corpus, queries, 50, score_function)
 
 
         unigram_scores = {}
@@ -424,9 +424,6 @@ class ngramBM25Retriever_freq(BaseSearch):
                         for ww in wset:
                             if ddict.pop(ww, None) is not None:
                                 removed_this_pass += 1
-                        # if not ddict:
-                        #     docs_with_scores.pop(doc_id)
-                        #     reverse_doc_id_mathcing.pop(doc_id)
             pbar.update(removed_this_pass)
         pbar.close()
 
@@ -484,7 +481,7 @@ def main():
     )
 
     dataset = "quora"
-    dataset = "nfcorpus"
+    #dataset = "nfcorpus"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
@@ -496,11 +493,11 @@ def main():
 
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
-        model = ngramBM25Retriever_freq(n=i, frequency=10)
+        model = ngramBM25Retriever_freq(n=i, frequency=5*i)
         # model = ngramBM25Retriever(n=i)
         # model = RegularBM25()
 
-        retriever = EvaluateRetrieval(model, k_values=[1000])
+        retriever = EvaluateRetrieval(model, k_values=[10, 100])
         results = retriever.retrieve(corpus, queries)
 
         logging.info(f"Evaluation for k in {retriever.k_values}")
