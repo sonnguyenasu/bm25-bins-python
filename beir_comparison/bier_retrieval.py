@@ -17,6 +17,9 @@ from beir.retrieval.search import BaseSearch
 from beir.retrieval.evaluation import EvaluateRetrieval
 
 import re
+
+from tqdm import tqdm
+
 TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)   # letters + digits
 
 def tokenize(text: str) -> list[str]:
@@ -183,8 +186,6 @@ class ngramBM25Retriever(BaseSearch):
             leftovers = set()
 
             queries = {}
-            # Todo: The way this should work is that you just randomly choose all the words and their pairs. Then compare
-            # the score to their unigram scoreas and break up any items that don't match the max unigram score
             while True:
 
                 if len(keywords) <= self.n:
@@ -269,26 +270,28 @@ class ngramBM25Retriever(BaseSearch):
         return results
 
 
-def most_common_pairs(requested_words) -> Optional[list[tuple[str, float]]]:
+def most_common_pairs(requested_words):
     """
     Return **all** keyword-score pairs that share the highest
     repeat-count across the collection, provided that count ≥ 2.
     If every pair is unique, return None.
     """
-    # 1) Flatten every per-doc list into one long list
     flat_pairs = [pair for pairs in requested_words.values() for pair in pairs]
 
-    # 2) Tally occurrences
-    counts = Counter(flat_pairs)
+    ngram_pairs = []
 
-    # 3) Find the largest repeat-count (>1)
+    for pair in flat_pairs:
+        temp_list = [pair[0][0], pair[1][0]]
+        temp_list.sort()
+        temp_string = " ".join(temp_list)
+        ngram_pairs.append(temp_string)
+
+    counts = Counter(ngram_pairs)
+
     if not counts:
-        return None                       # empty input
+        return None
     max_freq = max(counts.values())
-    if max_freq == 1:
-        return None                       # nothing repeats
 
-    # 4) Pull out every pair that hits that top frequency
     return [pair for pair, c in counts.items() if c == max_freq]
 
 
@@ -374,17 +377,69 @@ class ngramBM25Retriever_freq(BaseSearch):
             logging.debug(f"{key}, {score}")
             unigram_scores[key] = score
 
-
         # Mapping from doc id to the list of self.frequency number of ngrams
         requested_words: dict[str, list[tuple[str, float]]] = {}
 
-        for doc_id, score in docs_with_scores.items():
-            top_keywords = sorted(score.items(), key=lambda x: x[1], reverse=True)[:self.frequency]
-            requested_words[doc_id] = []
-            for i in range(0, len(top_keywords)//2, self.n):
-                requested_words[doc_id].append(top_keywords[i:i+self.n])
+        # Matches the doc ID to the keywords that it requested, so we can easily remove them later
+        reverse_doc_id_mathcing = {}
+        new_ngrams = {}
+        ngram_lookup = {}
 
-        most_common_pairs_variable = most_common_pairs(requested_words)
+        total_kv_pairs = sum(len(scores) for scores in docs_with_scores.values())
+        pbar = tqdm(total=total_kv_pairs, desc="keywords removed")
+
+        while True:
+            for doc_id, score in docs_with_scores.items():
+                top_keywords = sorted(score.items(), key=lambda x: x[1], reverse=True)[:self.frequency]
+
+                for keyword, score in top_keywords:
+                    if keyword in reverse_doc_id_mathcing.keys():
+                        reverse_doc_id_mathcing[keyword].append(doc_id)
+                    else:
+                        reverse_doc_id_mathcing[keyword] = [doc_id]
+
+                requested_words[doc_id] = []
+                for i in range(0, len(top_keywords)//2, self.n):
+                    requested_words[doc_id].append(top_keywords[i:i+self.n])
+            if not any(requested_words.values()):
+                print("We have no requested words")
+                break
+            mcps = most_common_pairs(requested_words)
+
+
+            if not mcps:
+                break
+
+            removed_this_pass = 0
+
+            for mcp in mcps:
+                words = mcp.split()
+                new_ngrams[words[0]] = mcp
+                wset = set(words)
+                for w in words:
+                    ngram_lookup.setdefault(w, mcp)
+                    for doc_id in reverse_doc_id_mathcing[w]:
+                        ddict = docs_with_scores[doc_id]
+                        # try to pop both words; += 1 for each successful pop
+                        for ww in wset:
+                            if ddict.pop(ww, None) is not None:
+                                removed_this_pass += 1
+                        # if not ddict:
+                        #     docs_with_scores.pop(doc_id)
+                        #     reverse_doc_id_mathcing.pop(doc_id)
+            pbar.update(removed_this_pass)
+        pbar.close()
+
+        ngram_bm25 = BM25Search(
+            index_name=self.index_name,
+            hostname=self.hostname,
+            initialize=self.initialize,
+            number_of_shards=self.shards,
+            retry_on_timeout=True,
+            timeout=600
+        )
+
+        final_hits = ngram_bm25.search(corpus, new_ngrams, top_k, score_function)
 
 
         new_lookup = {}
@@ -441,7 +496,8 @@ def main():
 
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
-        model = ngramBM25Retriever_freq(n=i)
+        model = ngramBM25Retriever_freq(n=i, frequency=10)
+        # model = ngramBM25Retriever(n=i)
         # model = RegularBM25()
 
         retriever = EvaluateRetrieval(model, k_values=[1000])
