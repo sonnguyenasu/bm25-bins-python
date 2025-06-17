@@ -358,7 +358,7 @@ class ngramBM25Retriever_freq(BaseSearch):
         )
 
         # We hope that this will produce at least 1 doc per keyword
-        unigram_hits = unigram_bm25.search(corpus, queries, 50, score_function)
+        unigram_hits = unigram_bm25.search(corpus, queries, 100, score_function)
 
 
         unigram_scores = {}
@@ -476,7 +476,7 @@ def main():
     logging.basicConfig(
         format="%(asctime)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.WARN,
+        level=logging.INFO,
         handlers=[LoggingHandler()],
     )
 
