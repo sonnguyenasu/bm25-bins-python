@@ -148,6 +148,7 @@ class ngramBM25Retriever(BaseSearch):
 
         print("Beginning ngram BM25")
 
+
         keywords = set()
 
         for item in corpus.values():
@@ -258,6 +259,20 @@ class ngramBM25Retriever(BaseSearch):
                     doc_items = original_corpus.get(doc_id)
                     new_corpus[doc_id] = doc_items
 
+
+        texts = []
+        for item in new_corpus.values():
+            texts.append(item["title"])
+            texts.append(item["text"])
+
+        # Count occurrences
+        counts = Counter(texts)
+
+        duplicates = {text: count for text, count in counts.items() if count > 1}
+
+        # Print number of duplicated values
+        print(f"Number of duplicated values in new corpus: {len(duplicates)}")
+
         final_bm25 = BM25Search(
             index_name=self.index_name,
             hostname=self.hostname,
@@ -270,6 +285,75 @@ class ngramBM25Retriever(BaseSearch):
         return results
 
 
+def weighted_top_pairs(
+    requested_words: dict[str, list[tuple[str, float]]] ,
+    alpha: float = 0.5,            # 0 → only score, 1 → only frequency
+    tolerance: float = 0.05        # keep anything within 5 % of the best
+) -> list[str]:
+    """
+    Combine *frequency* and *total score* into one metric.
+
+    Each pair key gets:
+        norm_freq  = freq / max_freq
+        norm_score = best_score / max_score          (max across its copies)
+        combined   = alpha*norm_freq + (1-alpha)*norm_score
+
+    Return every key whose combined score is within `tolerance` of the best.
+    """
+
+    flat_pairs = (
+        pair for pairs in requested_words.values() for pair in pairs
+    )
+
+    freq   = Counter()
+    best_s = defaultdict(float)     # best score seen for the key
+
+    for pair in flat_pairs:
+        key   = " ".join(sorted(kw for kw, _ in pair))
+        score = sum(s for _, s in pair)
+        freq[key]   += 1
+        best_s[key] = max(best_s[key], score)
+
+    if not freq:
+        return []
+
+    # 2.  Normalise frequency and score terms
+    max_freq  = max(freq.values())
+    max_score = max(best_s.values())
+
+    norm_combined = {}
+    for key in freq:
+        norm_f = freq[key]   / max_freq
+        norm_s = best_s[key] / max_score
+        norm_combined[key] = alpha * norm_f + (1 - alpha) * norm_s
+
+    # 3.  Keep anything “close enough” to the best combined value
+    best = max(norm_combined.values())
+    band = best * tolerance
+    return [k for k, v in norm_combined.items() if best - v <= band]
+
+
+def top_scoring_pairs(requested_words,
+                      tolerance: float = 0.03):
+    """
+    Return every keyword pair whose score is within `tolerance` (fraction)
+    of the best score observed.
+    """
+
+    flat_pairs = [pair for pairs in requested_words.values() for pair in pairs]
+
+
+    pair_to_score: dict[str, float] = defaultdict(float)
+    for pair in flat_pairs:
+        # alphabetical --> order-insensitive key
+        key = " ".join(sorted(kw for kw, _ in pair))
+        score = sum(score for _, score in pair)
+        pair_to_score[key] = max(pair_to_score[key], score)
+
+    max_score = max(pair_to_score.values())
+    band      = max_score * tolerance
+    return [p for p, s in pair_to_score.items() if max_score - s <= band]
+
 def most_common_pairs(requested_words):
     """
     Return **all** keyword-score pairs that share the highest
@@ -281,7 +365,9 @@ def most_common_pairs(requested_words):
     ngram_pairs = []
 
     for pair in flat_pairs:
-        temp_list = [pair[0][0], pair[1][0]]
+        temp_list = [pair[0][0]]
+        for i in range(1, len(pair)):
+            temp_list.append(pair[i][0])
         temp_list.sort()
         temp_string = " ".join(temp_list)
         ngram_pairs.append(temp_string)
@@ -304,7 +390,8 @@ class ngramBM25Retriever_freq(BaseSearch):
                  n: int = 2,
                  shards: int = 1,
                  k = 10,
-                 frequency = 10,):
+                 frequency = 10,
+                 method = 0,):
         super().__init__()
 
         self.index_name = index_name
@@ -316,6 +403,7 @@ class ngramBM25Retriever_freq(BaseSearch):
         logging.info(f"[TokenizedBM25] ES host={hostname}, index={index_name}")
         self.n = n
         self.frequency = frequency
+        self.method = method
 
     def search(self,
                corpus: dict[str, dict[str, str]],
@@ -339,14 +427,30 @@ class ngramBM25Retriever_freq(BaseSearch):
         keywords = set()
 
         for item in corpus.values():
-            keywords.update(tokenize(item["title"]))
-            keywords.update(tokenize(item["text"]))
+            item["title"] = " ".join(tokenize(item["title"]))
+            item["text"] = " ".join(tokenize(item["text"]))
+            keywords.update(item["title"].lower().split())
+            keywords.update(item["text"].lower().split())
 
         # to ensure that no score drags any others down, we do an unigram analysis
 
         queries = {}
         for word in keywords:
             queries[f"{word}"] = f"{word}"
+
+        texts = []
+        for item in corpus.values():
+            texts.append(item["title"])
+            texts.append(item["text"])
+
+        # Count occurrences
+        counts = Counter(texts)
+
+        duplicates = {text: count for text, count in counts.items() if count > 1}
+
+        # Print number of duplicated values
+        print(f"Number of duplicated values: {len(duplicates)}")
+
 
         unigram_bm25 = BM25Search(
             index_name=self.index_name,
@@ -357,8 +461,9 @@ class ngramBM25Retriever_freq(BaseSearch):
             timeout=600
         )
 
+
         # We hope that this will produce at least 1 doc per keyword
-        unigram_hits = unigram_bm25.search(corpus, queries, 100, score_function)
+        unigram_hits = unigram_bm25.search(corpus, queries, 300, score_function)
 
 
         unigram_scores = {}
@@ -389,8 +494,13 @@ class ngramBM25Retriever_freq(BaseSearch):
         pbar = tqdm(total=total_kv_pairs, desc="keywords removed")
 
         while True:
+            if self.n == 1:
+                break
+
             for doc_id, score in docs_with_scores.items():
                 top_keywords = sorted(score.items(), key=lambda x: x[1], reverse=True)[:self.frequency]
+                # test = sorted(score.items(), key=lambda x: x[1], reverse=True)
+                # test_doc = corpus[doc_id]
 
                 for keyword, score in top_keywords:
                     if keyword in reverse_doc_id_mathcing.keys():
@@ -399,13 +509,17 @@ class ngramBM25Retriever_freq(BaseSearch):
                         reverse_doc_id_mathcing[keyword] = [doc_id]
 
                 requested_words[doc_id] = []
-                for i in range(0, len(top_keywords)//2, self.n):
-                    requested_words[doc_id].append(top_keywords[i:i+self.n])
+                for i in range(0, len(top_keywords)//self.n):
+                    requested_words[doc_id].append(top_keywords[i * self.n:(i * self.n) + self.n])
             if not any(requested_words.values()):
                 print("We have no requested words")
                 break
-            mcps = most_common_pairs(requested_words)
-
+            if self.method == 0:
+                mcps = most_common_pairs(requested_words)
+            elif self.method == 1:
+                mcps = top_scoring_pairs(requested_words)
+            elif self.method == 2:
+                mcps = weighted_top_pairs(requested_words)
 
             if not mcps:
                 break
@@ -426,6 +540,21 @@ class ngramBM25Retriever_freq(BaseSearch):
                                 removed_this_pass += 1
             pbar.update(removed_this_pass)
         pbar.close()
+
+
+        # we randomly assign any 'stragglers'
+        stragglers = []
+        for doc_id, score in docs_with_scores.items():
+            top_keywords = sorted(score.keys(), key=lambda x: x, reverse=True)
+            stragglers.extend(top_keywords)
+
+        print(f" {len(stragglers)} stragglers")
+
+        for i in range(0, len(stragglers), self.n):
+            new_ngrams[stragglers[i]] = " ".join(stragglers[i:i + self.n])
+            ngram_lookup[stragglers[i]] = new_ngrams[stragglers[i]]
+
+
 
         ngram_bm25 = BM25Search(
             index_name=self.index_name,
@@ -452,11 +581,11 @@ class ngramBM25Retriever_freq(BaseSearch):
                 results = new_lookup.get(token)
 
                 if results is None: # this word doesn't appear in our corpus
-                    logging.warning(f"missing word: {qid}, {token}")
+                    logging.info(f"missing word: {qid}, {token}")
                     continue
 
                 for doc_id, score in results.items():
-                    doc_items = original_corpus.get(doc_id)
+                    doc_items = original_corpus[doc_id]
                     new_corpus[doc_id] = doc_items
 
         final_bm25 = BM25Search(
@@ -467,6 +596,21 @@ class ngramBM25Retriever_freq(BaseSearch):
             retry_on_timeout=True,
             timeout=600
         )
+
+        texts = []
+        for item in new_corpus.values():
+            texts.append(item["title"])
+            texts.append(item["text"])
+
+        # Count occurrences
+        counts = Counter(texts)
+
+        duplicates = {text: count for text, count in counts.items() if count > 1}
+
+        # Print number of duplicated values
+        print(f"Number of duplicated values: {len(duplicates)}")
+
+
         results = final_bm25.search(new_corpus, original_queries, top_k, score_function)
         return results
 
@@ -480,8 +624,13 @@ def main():
         handlers=[LoggingHandler()],
     )
 
-    dataset = "quora"
-    #dataset = "nfcorpus"
+    # datasets to test are scifact, trek covid, hotpotqa and nq
+    # dataset = "quora"
+    # dataset = "cqadupstack"
+    #dataset = "hotpotqa"
+    #dataset = "scifact"
+    # dataset = "nq"
+    dataset = "trec-covid"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
@@ -489,12 +638,12 @@ def main():
 
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
-    for i in [2, 3, 4, 5, 10, 20]:
+    for i in [1, 2, 3, 4, 5, 10, 20]:
 
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
-        model = ngramBM25Retriever_freq(n=i, frequency=5*i)
-        # model = ngramBM25Retriever(n=i)
+        #model = ngramBM25Retriever(n=i)
+        model = ngramBM25Retriever_freq(n=i, frequency=5 * i, method=1)
         # model = RegularBM25()
 
         retriever = EvaluateRetrieval(model, k_values=[10, 100])
@@ -510,6 +659,24 @@ def main():
         print(f"Recall@{retriever.k_values}  : {recall}")
         print(f"Precision@{retriever.k_values}: {precision}")
         print(f"MRR@{retriever.k_values}     : {mrr}")
+
+    print("======================= RESULTS FOR basic bm25 =======================")
+
+    model = RegularBM25()
+
+    retriever = EvaluateRetrieval(model, k_values=[10, 100])
+    results = retriever.retrieve(corpus, queries)
+
+    logging.info(f"Evaluation for k in {retriever.k_values}")
+    ndcg, map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+
+    mrr = retriever.evaluate_custom(qrels, results, k_values=retriever.k_values, metric="mrr")
+
+    print(f"NDCG@{retriever.k_values}    : {ndcg}")
+    print(f"MAP@{retriever.k_values}     : {map}")
+    print(f"Recall@{retriever.k_values}  : {recall}")
+    print(f"Precision@{retriever.k_values}: {precision}")
+    print(f"MRR@{retriever.k_values}     : {mrr}")
 
 if __name__ == "__main__":
     main()
