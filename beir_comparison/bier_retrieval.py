@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # evaluate_tokenized_bm25_msmarco.py
-
+import gc
 import logging
 import os
 import pathlib
@@ -451,6 +451,9 @@ class ngramBM25Retriever_freq(BaseSearch):
         # Print number of duplicated values
         print(f"Number of duplicated values: {len(duplicates)}")
 
+        del duplicates
+        del texts
+
 
         unigram_bm25 = BM25Search(
             index_name=self.index_name,
@@ -484,6 +487,9 @@ class ngramBM25Retriever_freq(BaseSearch):
 
         # Mapping from doc id to the list of self.frequency number of ngrams
         requested_words: dict[str, list[tuple[str, float]]] = {}
+
+        del unigram_hits
+        gc.collect()
 
         # Matches the doc ID to the keywords that it requested, so we can easily remove them later
         reverse_doc_id_mathcing = {}
@@ -554,7 +560,7 @@ class ngramBM25Retriever_freq(BaseSearch):
             new_ngrams[stragglers[i]] = " ".join(stragglers[i:i + self.n])
             ngram_lookup[stragglers[i]] = new_ngrams[stragglers[i]]
 
-
+        del stragglers
 
         ngram_bm25 = BM25Search(
             index_name=self.index_name,
@@ -588,6 +594,7 @@ class ngramBM25Retriever_freq(BaseSearch):
                     doc_items = original_corpus[doc_id]
                     new_corpus[doc_id] = doc_items
 
+        del final_hits
         final_bm25 = BM25Search(
             index_name=self.index_name,
             hostname=self.hostname,
@@ -596,19 +603,6 @@ class ngramBM25Retriever_freq(BaseSearch):
             retry_on_timeout=True,
             timeout=600
         )
-
-        texts = []
-        for item in new_corpus.values():
-            texts.append(item["title"])
-            texts.append(item["text"])
-
-        # Count occurrences
-        counts = Counter(texts)
-
-        duplicates = {text: count for text, count in counts.items() if count > 1}
-
-        # Print number of duplicated values
-        print(f"Number of duplicated values: {len(duplicates)}")
 
 
         results = final_bm25.search(new_corpus, original_queries, top_k, score_function)
@@ -630,7 +624,8 @@ def main():
     #dataset = "hotpotqa"
     #dataset = "scifact"
     # dataset = "nq"
-    dataset = "trec-covid"
+    #dataset = "trec-covid"
+    dataset = "msmarco"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
