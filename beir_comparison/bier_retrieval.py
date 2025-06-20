@@ -647,14 +647,32 @@ def main():
     # dataset = "scifact"
     # dataset = "nq"
     # dataset = "trec-covid"
-    # dataset = "msmarco"
-    dataset = "nfcorpus"
+    dataset = "msmarco"
+    # dataset = "nfcorpus"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
     data_path = util.download_and_unzip(url, out_dir)
 
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
+
+    print("======================= RESULTS FOR basic bm25 =======================")
+
+    model = RegularBM25()
+
+    retriever = EvaluateRetrieval(model, k_values=[10, 100])
+    results = retriever.retrieve(corpus, queries)
+
+    logging.info(f"Evaluation for k in {retriever.k_values}")
+    ndcg, map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+
+    mrr = retriever.evaluate_custom(qrels, results, k_values=retriever.k_values, metric="mrr")
+
+    print(f"NDCG@{retriever.k_values}    : {ndcg}")
+    print(f"MAP@{retriever.k_values}     : {map}")
+    print(f"Recall@{retriever.k_values}  : {recall}")
+    print(f"Precision@{retriever.k_values}: {precision}")
+    print(f"MRR@{retriever.k_values}     : {mrr}")
 
     for i in [1, 2, 3, 4, 5, 10, 20]:
 
@@ -678,23 +696,6 @@ def main():
         print(f"Precision@{retriever.k_values}: {precision}")
         print(f"MRR@{retriever.k_values}     : {mrr}")
 
-    print("======================= RESULTS FOR basic bm25 =======================")
-
-    model = RegularBM25()
-
-    retriever = EvaluateRetrieval(model, k_values=[10, 100])
-    results = retriever.retrieve(corpus, queries)
-
-    logging.info(f"Evaluation for k in {retriever.k_values}")
-    ndcg, map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
-
-    mrr = retriever.evaluate_custom(qrels, results, k_values=retriever.k_values, metric="mrr")
-
-    print(f"NDCG@{retriever.k_values}    : {ndcg}")
-    print(f"MAP@{retriever.k_values}     : {map}")
-    print(f"Recall@{retriever.k_values}  : {recall}")
-    print(f"Precision@{retriever.k_values}: {precision}")
-    print(f"MRR@{retriever.k_values}     : {mrr}")
 
 if __name__ == "__main__":
     main()
