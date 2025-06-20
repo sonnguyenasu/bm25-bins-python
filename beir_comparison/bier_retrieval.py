@@ -6,9 +6,11 @@ import os
 import pathlib
 import random
 from collections import defaultdict, Counter
+from contextlib import contextmanager
 from copy import deepcopy
 from itertools import combinations
 from typing import Optional
+import os, sys, contextlib
 
 from beir import LoggingHandler, util
 from beir.datasets.data_loader import GenericDataLoader
@@ -21,6 +23,17 @@ import re
 from tqdm import tqdm
 
 TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)   # letters + digits
+
+@contextmanager
+def silence_stderr():
+    with open(os.devnull, "w") as devnull:
+        old = sys.stderr
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stderr = old
+
 
 def tokenize(text: str) -> list[str]:
     """Lower-case, drop punctuation, collapse whitespace."""
@@ -582,9 +595,9 @@ class ngramBM25Retriever_freq(BaseSearch):
         del final_hits
 
         # results is a mapping from qid to a dict of doc ids and their scores
-        results: dict[str, dict[str, float]] = {}
+        final_res: dict[str, dict[str, float]] = {}
 
-        for qid, query_text in original_queries.items():
+        for qid, query_text in tqdm(original_queries.items()):
             new_corpus = {}
             tokens = tokenize(query_text)
 
@@ -609,11 +622,13 @@ class ngramBM25Retriever_freq(BaseSearch):
                 timeout=600
             )
 
+            with silence_stderr():  # hides *all* stderr output
+                temp_results = final_bm25.search(new_corpus, {qid: query_text}, top_k, score_function)
 
-            temp_results = final_bm25.search(new_corpus, {qid: query_text}, top_k, score_function)
-            results.update(temp_results)
+            for key, val in temp_results.items():
+                final_res[key] = val
 
-        return results
+        return final_res
 
 
 def main():
@@ -631,8 +646,9 @@ def main():
     # dataset = "hotpotqa"
     # dataset = "scifact"
     # dataset = "nq"
-    dataset = "trec-covid"
+    # dataset = "trec-covid"
     # dataset = "msmarco"
+    dataset = "nfcorpus"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
