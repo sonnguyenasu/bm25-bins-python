@@ -29,7 +29,7 @@ def tokenize(text: str) -> list[str]:
 
 class RegularBM25(BaseSearch):
     def __init__(self,
-                 hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
+                 hostname: str = "http://localhost:9200",
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  shards: int = 1):
@@ -59,7 +59,7 @@ class RegularBM25(BaseSearch):
 
 class TokenizedBM25Retriever(BaseSearch):
     def __init__(self,
-                 hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
+                 hostname: str = "http://localhost:9200",
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  shards: int = 1):
@@ -112,7 +112,7 @@ class TokenizedBM25Retriever(BaseSearch):
 
 class ngramBM25Retriever(BaseSearch):
     def __init__(self,
-                 hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
+                 hostname: str = "http://localhost:9200",
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  n: int = 2,
@@ -358,7 +358,7 @@ def most_common_pairs(requested_words):
     """
     Return **all** keyword-score pairs that share the highest
     repeat-count across the collection, provided that count ≥ 2.
-    If every pair is unique, return None.
+    If every pair is unique, return them all.
     """
     flat_pairs = [pair for pairs in requested_words.values() for pair in pairs]
 
@@ -375,7 +375,7 @@ def most_common_pairs(requested_words):
     counts = Counter(ngram_pairs)
 
     if not counts:
-        return None
+        return [pair for pair, c in counts.items()]
     max_freq = max(counts.values())
 
     return [pair for pair, c in counts.items() if c == max_freq]
@@ -384,7 +384,7 @@ def most_common_pairs(requested_words):
 
 class ngramBM25Retriever_freq(BaseSearch):
     def __init__(self,
-                 hostname: str = "http://fedora-ripley.tail0c8c1f.ts.net:9200",
+                 hostname: str = "http://localhost:9200",
                  index_name: str = "msmarco",
                  initialize: bool = True,
                  n: int = 2,
@@ -575,12 +575,17 @@ class ngramBM25Retriever_freq(BaseSearch):
 
 
         new_lookup = {}
-        new_corpus = {}
         for key, hits in final_hits.items():  # ngramlookup has some dead values
             for word in tokenize(ngram_lookup[key]):
                 new_lookup[word] = hits
 
+        del final_hits
+
+        # results is a mapping from qid to a dict of doc ids and their scores
+        results: dict[str, dict[str, float]] = {}
+
         for qid, query_text in original_queries.items():
+            new_corpus = {}
             tokens = tokenize(query_text)
 
             for token in tokens:
@@ -594,18 +599,20 @@ class ngramBM25Retriever_freq(BaseSearch):
                     doc_items = original_corpus[doc_id]
                     new_corpus[doc_id] = doc_items
 
-        del final_hits
-        final_bm25 = BM25Search(
-            index_name=self.index_name,
-            hostname=self.hostname,
-            initialize=self.initialize,
-            number_of_shards=self.shards,
-            retry_on_timeout=True,
-            timeout=600
-        )
+
+            final_bm25 = BM25Search(
+                index_name=self.index_name,
+                hostname=self.hostname,
+                initialize=self.initialize,
+                number_of_shards=self.shards,
+                retry_on_timeout=True,
+                timeout=600
+            )
 
 
-        results = final_bm25.search(new_corpus, original_queries, top_k, score_function)
+            temp_results = final_bm25.search(new_corpus, {qid: query_text}, top_k, score_function)
+            results.update(temp_results)
+
         return results
 
 
@@ -621,11 +628,11 @@ def main():
     # datasets to test are scifact, trek covid, hotpotqa and nq
     # dataset = "quora"
     # dataset = "cqadupstack"
-    #dataset = "hotpotqa"
-    #dataset = "scifact"
+    # dataset = "hotpotqa"
+    # dataset = "scifact"
     # dataset = "nq"
-    #dataset = "trec-covid"
-    dataset = "msmarco"
+    dataset = "trec-covid"
+    # dataset = "msmarco"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
@@ -638,7 +645,7 @@ def main():
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
         #model = ngramBM25Retriever(n=i)
-        model = ngramBM25Retriever_freq(n=i, frequency=5 * i, method=1)
+        model = ngramBM25Retriever_freq(n=i, frequency=5 * i, method=0)
         # model = RegularBM25()
 
         retriever = EvaluateRetrieval(model, k_values=[10, 100])
