@@ -20,9 +20,24 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 
 import re
 
+from pyserini.analysis import Analyzer, get_lucene_analyzer   # ✔ new API
+from pyserini.index import lucene                             # keep this if you still
+                                                              # need Lucene readers
+import re
+from rank_bm25 import BM25Okapi
 from tqdm import tqdm
+import numpy as np
 
-TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)   # letters + digits
+TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)
+
+# ----- build a Krovetz‑stemmed English analyzer --------------------------
+analyzer = Analyzer(get_lucene_analyzer(stemmer='krovetz'))   # one line!
+# -------------------------------------------------------------------------
+
+def tokenize(text: str) -> list[str]:
+    """Fast regex pre‑split → Lucene analyzer."""
+    coarse = TOKEN_RE.findall(text.lower())
+    return analyzer.analyze(" ".join(coarse))
 
 @contextmanager
 def silence_stderr():
@@ -57,17 +72,56 @@ class RegularBM25(BaseSearch):
         )
         logging.info(f"[RegularBM25] ES host={hostname}, index={index_name}")
 
+    # def search(self,
+    #            corpus: dict[str, dict[str, str]],
+    #            queries: dict[str, str],
+    #            top_k: int,
+    #            score_function,
+    #            **kwargs
+    #            ) -> dict[str, dict[str, float]]:
+    #     # delegate to BEIR’s BM25Search on the whole corpus
+    #     results = self.bm25.search(corpus, queries, top_k, score_function)
+    #     return results
+
     def search(self,
                corpus: dict[str, dict[str, str]],
                queries: dict[str, str],
                top_k: int,
-               score_function,
+               score_function=None,  # kept for API parity; ignored locally
                **kwargs
                ) -> dict[str, dict[str, float]]:
-        # delegate to BEIR’s BM25Search on the whole corpus
-        results = self.bm25.search(corpus, queries, top_k, score_function)
-        return results
+        """
+        Local BM25 over the *full* corpus.
+        Returns BEIR‑style: {qid: {doc_id: score, …}, …}
+        """
 
+        # ------------------------------------------------------------------
+        # 1.  Build an in‑memory index exactly once for the whole corpus
+        # ------------------------------------------------------------------
+        doc_ids = list(corpus.keys())  # integer index → doc_id lookup
+        tokenised_docs = [tokenize(doc_to_text(corpus[d])) for d in doc_ids]
+        bm25 = BM25Okapi(tokenised_docs)
+
+        # ------------------------------------------------------------------
+        # 2.  Score each query against that single index
+        # ------------------------------------------------------------------
+        final_res: dict[str, dict[str, float]] = {}
+
+        for qid, query_text in queries.items():
+            q_tokens = tokenize(query_text)
+
+            scores = bm25.get_scores(q_tokens)  # np.ndarray[float]
+            if top_k is None or top_k <= 0:
+                # keep all docs (rare in BEIR but allowed)
+                top_idx = np.argsort(scores)[::-1]
+            else:
+                top_idx = np.argsort(scores)[::-1][:top_k]
+
+            # BEIR wants a mapping doc_id -> score (float32 ok)
+            final_res[qid] = {doc_ids[i]: float(scores[i])
+                              for i in top_idx if scores[i] > 0}
+
+        return final_res
 
 
 class TokenizedBM25Retriever(BaseSearch):
@@ -300,8 +354,8 @@ class ngramBM25Retriever(BaseSearch):
 
 def weighted_top_pairs(
     requested_words: dict[str, list[tuple[str, float]]] ,
-    alpha: float = 0.5,            # 0 → only score, 1 → only frequency
-    tolerance: float = 0.05        # keep anything within 5 % of the best
+    alpha: float = 0.3,            # 0 → only score, 1 → only frequency
+    tolerance: float = 0.03        # keep anything within 5 % of the best
 ) -> list[str]:
     """
     Combine *frequency* and *total score* into one metric.
@@ -594,41 +648,82 @@ class ngramBM25Retriever_freq(BaseSearch):
 
         del final_hits
 
-        # results is a mapping from qid to a dict of doc ids and their scores
+        # ---------- (1)  pre‑tokenise every document once ----------
+        tokenised_docs = {doc_id: tokenize(doc_to_text(doc))
+                          for doc_id, doc in original_corpus.items()}
+
+        # ---------- (2)  build the final results container ----------
         final_res: dict[str, dict[str, float]] = {}
 
+        # ---------- (3)  loop over queries exactly as before ----------
         for qid, query_text in tqdm(original_queries.items()):
-            new_corpus = {}
             tokens = tokenize(query_text)
 
-            for token in tokens:
-                results = new_lookup.get(token)
-
-                if results is None: # this word doesn't appear in our corpus
-                    logging.info(f"missing word: {qid}, {token}")
+            # -- (3a) gather the per‑query document IDs from your lookup --
+            doc_ids = set()  # no duplicates
+            for tok in tokens:
+                hits = new_lookup.get(tok)
+                if hits is None:
+                    logging.info(f"missing word: {qid}, {tok}")
                     continue
+                doc_ids.update(hits.keys())
 
-                for doc_id, score in results.items():
-                    doc_items = original_corpus[doc_id]
-                    new_corpus[doc_id] = doc_items
+            if not doc_ids:  # nothing to rank
+                final_res[qid] = {}
+                continue
 
+            # -- (3b) build the *independent* corpus for this query --
+            doc_ids_list = list(doc_ids)  # stable order
+            per_query_docs = [tokenised_docs[d] for d in doc_ids_list]
 
-            final_bm25 = BM25Search(
-                index_name=self.index_name,
-                hostname=self.hostname,
-                initialize=self.initialize,
-                number_of_shards=self.shards,
-                retry_on_timeout=True,
-                timeout=600
-            )
+            # -- (3c) run a local BM25 over that slice only --
+            bm25 = BM25Okapi(per_query_docs)  # in‑memory index
+            scores = bm25.get_scores(tokens)  # 1 score per doc
 
-            with silence_stderr():  # hides *all* stderr output
-                temp_results = final_bm25.search(new_corpus, {qid: query_text}, top_k, score_function)
-
-            for key, val in temp_results.items():
-                final_res[key] = val
+            # -- (3d) keep the top‑k and store in BEIR format --
+            top_idx = np.argsort(scores)[::-1][:top_k]
+            final_res[qid] = {doc_ids_list[i]: float(scores[i])
+                              for i in top_idx}
 
         return final_res
+
+        # # results is a mapping from qid to a dict of doc ids and their scores
+        # final_res: dict[str, dict[str, float]] = {}
+        #
+        # for qid, query_text in tqdm(original_queries.items()):
+        #     new_corpus = {}
+        #     tokens = tokenize(query_text)
+        #
+        #     for token in tokens:
+        #         results = new_lookup.get(token)
+        #
+        #         if results is None: # this word doesn't appear in our corpus
+        #             logging.info(f"missing word: {qid}, {token}")
+        #             continue
+        #
+        #         for doc_id, score in results.items():
+        #             doc_items = original_corpus[doc_id]
+        #             new_corpus[doc_id] = doc_items
+        #
+        #
+        #     final_bm25 = BM25Search(
+        #         index_name=self.index_name,
+        #         hostname=self.hostname,
+        #         initialize=self.initialize,
+        #         number_of_shards=self.shards,
+        #         retry_on_timeout=True,
+        #         timeout=600
+        #     )
+        #
+        #     with silence_stderr():  # hides *all* stderr output
+        #         temp_results = final_bm25.search(new_corpus, {qid: query_text}, top_k, score_function)
+        #
+        #     for key, val in temp_results.items():
+        #         final_res[key] = val
+        #
+        # return final_res
+
+
 
 
 def main():
@@ -640,15 +735,18 @@ def main():
         handlers=[LoggingHandler()],
     )
 
-    # datasets to test are scifact, trek covid, hotpotqa and nq
+    # datasets to test are scifact, nq, hotpotqa, quora, trec-covid, arguana
     # dataset = "quora"
+    # dataset = "arguana"
     # dataset = "cqadupstack"
     # dataset = "hotpotqa"
     # dataset = "scifact"
     # dataset = "nq"
-    # dataset = "trec-covid"
-    dataset = "msmarco"
-    # dataset = "nfcorpus"
+    # this one is still rather slow, but unfortunately is the best...
+    dataset = "trec-covid"
+    # dataset = "msmarco"
+    # this one is the fastest (but both perform too well on this!)
+    dataset = "nfcorpus"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
     out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
@@ -674,12 +772,12 @@ def main():
     print(f"Precision@{retriever.k_values}: {precision}")
     print(f"MRR@{retriever.k_values}     : {mrr}")
 
-    for i in [1, 2, 3, 4, 5, 10, 20]:
+    for i in [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]:
 
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
         #model = ngramBM25Retriever(n=i)
-        model = ngramBM25Retriever_freq(n=i, frequency=5 * i, method=0)
+        model = ngramBM25Retriever_freq(n=i, frequency=5 * i, method=2)
         # model = RegularBM25()
 
         retriever = EvaluateRetrieval(model, k_values=[10, 100])
@@ -697,5 +795,15 @@ def main():
         print(f"MRR@{retriever.k_values}     : {mrr}")
 
 
+
+def doc_to_text(doc) -> str:
+    if isinstance(doc, str):
+        return doc
+    if isinstance(doc, dict):                # BEIR standard
+        return f"{doc.get('title', '')} {doc.get('text', '')}"
+    return str(doc)
+
 if __name__ == "__main__":
     main()
+
+
