@@ -691,6 +691,7 @@ class ngramBM25Retriever_freq(BaseSearch):
                               for i in top_idx}
         json.dump(track_qid_raw, open(f"{self.index_name}_{self.n}-gram_results_per_qid_k@{top_k}.json", "w"))
         json.dump(final_res, open(f"{self.index_name}_{self.n}-gram_final_result_k@{top_k}.json", "w"))
+        print(f"Finished running {self.n}-gram on k={top_k}")
         return final_res
 
         # # results is a mapping from qid to a dict of doc ids and their scores
