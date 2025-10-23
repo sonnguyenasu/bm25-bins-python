@@ -11,6 +11,7 @@ from copy import deepcopy
 from itertools import combinations
 from typing import Optional
 import os, sys, contextlib
+import json
 
 from beir import LoggingHandler, util
 from beir.datasets.data_loader import GenericDataLoader
@@ -648,12 +649,15 @@ class ngramBM25Retriever_freq(BaseSearch):
 
         del final_hits
 
+        json.dump(new_lookup, open(f"{self.index_name}_{self.n}-gram_corpus_k@{top_k}.json", "w"))
+
         # ---------- (1)  pre‑tokenise every document once ----------
         tokenised_docs = {doc_id: tokenize(doc_to_text(doc))
                           for doc_id, doc in original_corpus.items()}
 
         # ---------- (2)  build the final results container ----------
         final_res: dict[str, dict[str, float]] = {}
+        track_qid_raw = {}
 
         # ---------- (3)  loop over queries exactly as before ----------
         for qid, query_text in tqdm(original_queries.items()):
@@ -674,6 +678,7 @@ class ngramBM25Retriever_freq(BaseSearch):
 
             # -- (3b) build the *independent* corpus for this query --
             doc_ids_list = list(doc_ids)  # stable order
+            track_qid_raw[(qid, query_text)] = doc_ids_list # dump these out before doing the BM25
             per_query_docs = [tokenised_docs[d] for d in doc_ids_list]
 
             # -- (3c) run a local BM25 over that slice only --
@@ -684,7 +689,8 @@ class ngramBM25Retriever_freq(BaseSearch):
             top_idx = np.argsort(scores)[::-1][:top_k]
             final_res[qid] = {doc_ids_list[i]: float(scores[i])
                               for i in top_idx}
-
+        json.dump(track_qid_raw, open(f"{self.index_name}_{self.n}-gram_results_per_qid_k@{top_k}.json", "w"))
+        json.dump(final_res, open(f"{self.index_name}_{self.n}-gram_final_result_k@{top_k}.json", "w"))
         return final_res
 
         # # results is a mapping from qid to a dict of doc ids and their scores
@@ -740,19 +746,19 @@ def main():
     # dataset = "arguana"
     # dataset = "cqadupstack"
     # dataset = "hotpotqa"
-    # dataset = "scifact"
+    dataset = "scifact"
     # dataset = "nq"
     # this one is still rather slow, but unfortunately is the best...
-    dataset = "trec-covid"
+    # dataset = "trec-covid"
     # dataset = "msmarco"
     # this one is the fastest (but both perform too well on this!)
-    dataset = "nfcorpus"
+    # dataset = "nfcorpus"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
     # out_dir = os.path.join(pathlib.Path(__file__).parent, "datasets")
-    out_dir = "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
+    out_dir = "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
     data_path = util.download_and_unzip(url, out_dir)
 
-    corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
+    corpus, queries, qrels = GenericDataLoader(data_path).load(split="train")
 
     print("======================= RESULTS FOR basic bm25 =======================")
 
@@ -772,15 +778,15 @@ def main():
     print(f"Precision@{retriever.k_values}: {precision}")
     print(f"MRR@{retriever.k_values}     : {mrr}")
 
-    for i in [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]:
+    for i in [1, 2]:
 
         print("======================= RESULTS FOR n = {i} =======================".format(i=i))
 
         #model = ngramBM25Retriever(n=i)
-        model = ngramBM25Retriever_freq(n=i, frequency=5 * i, method=2)
+        model = ngramBM25Retriever_freq(n=i, frequency=5 * i, method=2, index_name=dataset.lower())
         # model = RegularBM25()
 
-        retriever = EvaluateRetrieval(model, k_values=[10, 100])
+        retriever = EvaluateRetrieval(model, k_values=[10, 100, 1000, 2000, 3000])
         results = retriever.retrieve(corpus, queries)
 
         logging.info(f"Evaluation for k in {retriever.k_values}")
