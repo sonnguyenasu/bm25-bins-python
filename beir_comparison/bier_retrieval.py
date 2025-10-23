@@ -101,7 +101,7 @@ class RegularBM25(BaseSearch):
         # ------------------------------------------------------------------
         doc_ids = list(corpus.keys())  # integer index → doc_id lookup
         logging.info(f"[RegularBM25] tokeniser starting")
-        tokenised_docs = [tokenize(doc_to_text(corpus[d])) for d in doc_ids]
+        tokenised_docs = [tokenize(doc_to_text(corpus[d])) for d in tqdm(doc_ids)]
         logging.info(f"[RegularBM25] search starting")
         bm25 = BM25Okapi(tokenised_docs)
 
