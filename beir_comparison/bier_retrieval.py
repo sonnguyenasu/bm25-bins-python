@@ -100,7 +100,9 @@ class RegularBM25(BaseSearch):
         # 1.  Build an in‑memory index exactly once for the whole corpus
         # ------------------------------------------------------------------
         doc_ids = list(corpus.keys())  # integer index → doc_id lookup
+        logging.info(f"[RegularBM25] tokeniser starting")
         tokenised_docs = [tokenize(doc_to_text(corpus[d])) for d in doc_ids]
+        logging.info(f"[RegularBM25] search starting")
         bm25 = BM25Okapi(tokenised_docs)
 
         # ------------------------------------------------------------------
@@ -108,7 +110,7 @@ class RegularBM25(BaseSearch):
         # ------------------------------------------------------------------
         final_res: dict[str, dict[str, float]] = {}
 
-        for qid, query_text in queries.items():
+        for qid, query_text in tqdm(queries.items()):
             q_tokens = tokenize(query_text)
 
             scores = bm25.get_scores(q_tokens)  # np.ndarray[float]
@@ -443,7 +445,7 @@ def most_common_pairs(requested_words):
     counts = Counter(ngram_pairs)
 
     if not counts:
-        return [pair for pair, c in counts.items()]
+        return [pair for pair, c in count.items()]
     max_freq = max(counts.values())
 
     return [pair for pair, c in counts.items() if c == max_freq]
@@ -747,11 +749,11 @@ def main():
     # dataset = "arguana"
     # dataset = "cqadupstack"
     # dataset = "hotpotqa"
-    dataset = "scifact"
+    # dataset = "scifact"
     # dataset = "nq"
     # this one is still rather slow, but unfortunately is the best...
     # dataset = "trec-covid"
-    # dataset = "msmarco"
+    dataset = "msmarco"
     # this one is the fastest (but both perform too well on this!)
     # dataset = "nfcorpus"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
