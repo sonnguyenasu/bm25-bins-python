@@ -678,7 +678,7 @@ class ngramBM25Retriever_freq(BaseSearch):
 
             # -- (3b) build the *independent* corpus for this query --
             doc_ids_list = list(doc_ids)  # stable order
-            track_qid_raw[(qid, query_text)] = doc_ids_list # dump these out before doing the BM25
+            track_qid_raw[qid] = doc_ids_list # dump these out before doing the BM25
             per_query_docs = [tokenised_docs[d] for d in doc_ids_list]
 
             # -- (3c) run a local BM25 over that slice only --
