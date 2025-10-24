@@ -622,10 +622,10 @@ class ngramBM25Retriever_freq(BaseSearch):
 
 
         # we randomly assign any 'stragglers'
-        stragglers = []
+        stragglers = set()
         for doc_id, score in docs_with_scores.items():
             top_keywords = sorted(score.keys(), key=lambda x: x, reverse=True)
-            stragglers.extend(top_keywords)
+            stragglers.update(top_keywords)
 
         logging.debug(f" {len(stragglers)} stragglers")
 
