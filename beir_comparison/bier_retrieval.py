@@ -522,7 +522,7 @@ class ngramBM25Retriever_freq(BaseSearch):
         duplicates = {text: count for text, count in counts.items() if count > 1}
 
         # Print number of duplicated values
-        print(f"Number of duplicated values: {len(duplicates)}")
+        logging.info(f"Number of duplicated values: {len(duplicates)}")
 
         del duplicates
         del texts
@@ -591,7 +591,7 @@ class ngramBM25Retriever_freq(BaseSearch):
                 for i in range(0, len(top_keywords)//self.n):
                     requested_words[doc_id].append(top_keywords[i * self.n:(i * self.n) + self.n])
             if not any(requested_words.values()):
-                print("We have no requested words")
+                logging.info("We have no requested words")
                 break
             if self.method == 0:
                 mcps = most_common_pairs(requested_words)
@@ -644,6 +644,7 @@ class ngramBM25Retriever_freq(BaseSearch):
             timeout=600
         )
 
+        logging.info(f"Running elastic search on newly made {self.n}-grams")
         final_hits = ngram_bm25.search(corpus, new_ngrams, top_k, score_function)
 
 
@@ -656,6 +657,8 @@ class ngramBM25Retriever_freq(BaseSearch):
 
         json.dump(new_lookup, open(f"{self.index_name}_{self.n}-gram_corpus_k@{top_k}.json", "w"))
 
+        logging.info("Tokenising all documents...")
+
         # ---------- (1)  pre‑tokenise every document once ----------
         tokenised_docs = {doc_id: tokenize(doc_to_text(doc))
                           for doc_id, doc in original_corpus.items()}
@@ -665,7 +668,7 @@ class ngramBM25Retriever_freq(BaseSearch):
         track_qid_raw = {}
 
         # ---------- (3)  loop over queries exactly as before ----------
-        for qid, query_text in tqdm(original_queries.items()):
+        for qid, query_text in tqdm(original_queries.items(), desc="Mapping n-grams to docs"):
             tokens = tokenize(query_text)
 
             # -- (3a) gather the per‑query document IDs from your lookup --
@@ -673,7 +676,7 @@ class ngramBM25Retriever_freq(BaseSearch):
             for tok in tokens:
                 hits = new_lookup.get(tok)
                 if hits is None:
-                    logging.info(f"missing word: {qid}, {tok}")
+                    logging.debug(f"missing word: {qid}, {tok}")
                     continue
                 doc_ids.update(hits.keys())
 
