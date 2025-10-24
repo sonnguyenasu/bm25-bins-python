@@ -503,6 +503,8 @@ class ngramBM25Retriever_freq(BaseSearch):
             keywords.update(item["title"].lower().split())
             keywords.update(item["text"].lower().split())
 
+        logging.info(f"Vocab size is: {len(keywords)}")
+
         # to ensure that no score drags any others down, we do an unigram analysis
 
         queries = {}
@@ -625,7 +627,7 @@ class ngramBM25Retriever_freq(BaseSearch):
             top_keywords = sorted(score.keys(), key=lambda x: x, reverse=True)
             stragglers.extend(top_keywords)
 
-        print(f" {len(stragglers)} stragglers")
+        logging.debug(f" {len(stragglers)} stragglers")
 
         for i in range(0, len(stragglers), self.n):
             new_ngrams[stragglers[i]] = " ".join(stragglers[i:i + self.n])
