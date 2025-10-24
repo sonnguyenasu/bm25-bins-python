@@ -73,58 +73,59 @@ class RegularBM25(BaseSearch):
         )
         logging.info(f"[RegularBM25] ES host={hostname}, index={index_name}")
 
-    # def search(self,
-    #            corpus: dict[str, dict[str, str]],
-    #            queries: dict[str, str],
-    #            top_k: int,
-    #            score_function,
-    #            **kwargs
-    #            ) -> dict[str, dict[str, float]]:
-    #     # delegate to BEIR’s BM25Search on the whole corpus
-    #     results = self.bm25.search(corpus, queries, top_k, score_function)
-    #     return results
-
     def search(self,
                corpus: dict[str, dict[str, str]],
                queries: dict[str, str],
                top_k: int,
-               score_function=None,  # kept for API parity; ignored locally
+               score_function,
                **kwargs
                ) -> dict[str, dict[str, float]]:
-        """
-        Local BM25 over the *full* corpus.
-        Returns BEIR‑style: {qid: {doc_id: score, …}, …}
-        """
+        # delegate to BEIR’s BM25Search on the whole corpus
+        results = self.bm25.search(corpus, queries, top_k, score_function)
+        return results
 
-        # ------------------------------------------------------------------
-        # 1.  Build an in‑memory index exactly once for the whole corpus
-        # ------------------------------------------------------------------
-        doc_ids = list(corpus.keys())  # integer index → doc_id lookup
-        logging.info(f"[RegularBM25] tokeniser starting")
-        tokenised_docs = [tokenize(doc_to_text(corpus[d])) for d in tqdm(doc_ids)]
-        logging.info(f"[RegularBM25] search starting")
-        bm25 = BM25Okapi(tokenised_docs)
-        logging.info(f"[RegularBM25] search finished")
-        # ------------------------------------------------------------------
-        # 2.  Score each query against that single index
-        # ------------------------------------------------------------------
-        final_res: dict[str, dict[str, float]] = {}
-
-        for qid, query_text in tqdm(queries.items()):
-            q_tokens = tokenize(query_text)
-
-            scores = bm25.get_scores(q_tokens)  # np.ndarray[float]
-            if top_k is None or top_k <= 0:
-                # keep all docs (rare in BEIR but allowed)
-                top_idx = np.argsort(scores)[::-1]
-            else:
-                top_idx = np.argsort(scores)[::-1][:top_k]
-
-            # BEIR wants a mapping doc_id -> score (float32 ok)
-            final_res[qid] = {doc_ids[i]: float(scores[i])
-                              for i in top_idx if scores[i] > 0}
-        logging.info(f"[RegularBM25] search returning")
-        return final_res
+    # No idea why this takes a century to run on MS marco...
+    # def search(self,
+    #            corpus: dict[str, dict[str, str]],
+    #            queries: dict[str, str],
+    #            top_k: int,
+    #            score_function=None,  # kept for API parity; ignored locally
+    #            **kwargs
+    #            ) -> dict[str, dict[str, float]]:
+    #     """
+    #     Local BM25 over the *full* corpus.
+    #     Returns BEIR‑style: {qid: {doc_id: score, …}, …}
+    #     """
+    #
+    #     # ------------------------------------------------------------------
+    #     # 1.  Build an in‑memory index exactly once for the whole corpus
+    #     # ------------------------------------------------------------------
+    #     doc_ids = list(corpus.keys())  # integer index → doc_id lookup
+    #     logging.info(f"[RegularBM25] tokeniser starting")
+    #     tokenised_docs = [tokenize(doc_to_text(corpus[d])) for d in tqdm(doc_ids)]
+    #     logging.info(f"[RegularBM25] search starting")
+    #     bm25 = BM25Okapi(tokenised_docs)
+    #     logging.info(f"[RegularBM25] search finished")
+    #     # ------------------------------------------------------------------
+    #     # 2.  Score each query against that single index
+    #     # ------------------------------------------------------------------
+    #     final_res: dict[str, dict[str, float]] = {}
+    #
+    #     for qid, query_text in tqdm(queries.items()):
+    #         q_tokens = tokenize(query_text)
+    #
+    #         scores = bm25.get_scores(q_tokens)  # np.ndarray[float]
+    #         if top_k is None or top_k <= 0:
+    #             # keep all docs (rare in BEIR but allowed)
+    #             top_idx = np.argsort(scores)[::-1]
+    #         else:
+    #             top_idx = np.argsort(scores)[::-1][:top_k]
+    #
+    #         # BEIR wants a mapping doc_id -> score (float32 ok)
+    #         final_res[qid] = {doc_ids[i]: float(scores[i])
+    #                           for i in top_idx if scores[i] > 0}
+    #     logging.info(f"[RegularBM25] search returning")
+    #     return final_res
 
 
 class TokenizedBM25Retriever(BaseSearch):
@@ -749,11 +750,11 @@ def main():
     # dataset = "arguana"
     # dataset = "cqadupstack"
     # dataset = "hotpotqa"
-    # dataset = "scifact"
+    dataset = "scifact"
     # dataset = "nq"
     # this one is still rather slow, but unfortunately is the best...
     # dataset = "trec-covid"
-    dataset = "msmarco"
+    # dataset = "msmarco"
     # this one is the fastest (but both perform too well on this!)
     # dataset = "nfcorpus"
     url = f"https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
