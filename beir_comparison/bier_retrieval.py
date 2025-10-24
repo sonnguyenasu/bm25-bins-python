@@ -104,7 +104,7 @@ class RegularBM25(BaseSearch):
         tokenised_docs = [tokenize(doc_to_text(corpus[d])) for d in tqdm(doc_ids)]
         logging.info(f"[RegularBM25] search starting")
         bm25 = BM25Okapi(tokenised_docs)
-
+        logging.info(f"[RegularBM25] search finished")
         # ------------------------------------------------------------------
         # 2.  Score each query against that single index
         # ------------------------------------------------------------------
@@ -123,7 +123,7 @@ class RegularBM25(BaseSearch):
             # BEIR wants a mapping doc_id -> score (float32 ok)
             final_res[qid] = {doc_ids[i]: float(scores[i])
                               for i in top_idx if scores[i] > 0}
-
+        logging.info(f"[RegularBM25] search returning")
         return final_res
 
 
